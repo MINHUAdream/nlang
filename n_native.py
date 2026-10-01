@@ -120,10 +120,10 @@ class NativeBackend:
         for old in retired:
             old.close()
 
-    def compile_source(self, source: str) -> Compilation:
+    def compile_source(self, source: str, **kwargs: Any) -> Compilation:
         from n_compile import compile_source
 
-        return compile_source(source)
+        return compile_source(source, **kwargs)
 
     def execute(self, wave: Mapping[str, Any], field: Any):
         from n_rtm import Delta

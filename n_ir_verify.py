@@ -31,6 +31,8 @@ _LEGAL_KINDS = {
             "layout_cast",
             "buffer",
             "move",
+            "candidate_set",
+            "selection",
         }
     ),
     IRPhase.MACHINE: frozenset(
@@ -45,6 +47,8 @@ _LEGAL_KINDS = {
             "machine.effect",
             "machine.move",
             "machine.return",
+            "candidate_set",
+            "selection",
         }
     ),
 }

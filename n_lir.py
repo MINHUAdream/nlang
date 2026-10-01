@@ -137,7 +137,7 @@ def lower_machine(planned: NIRModule, manifest: PlanManifest) -> NIRModule:
     semantic_ops = tuple(
         operation
         for operation in planned.operations
-        if operation.get("kind") in {"field", "wave", "commit"}
+        if operation.get("kind") in {"field", "wave", "commit", "candidate_set", "selection"}
     )
     plan_nodes = [
         operation for operation in planned.operations if operation.get("kind") == "plan"
@@ -156,13 +156,31 @@ def lower_machine(planned: NIRModule, manifest: PlanManifest) -> NIRModule:
             "device": manifest.device,
             "fallback": manifest.fallback,
             "objective_epoch": manifest.objective_epoch,
+            "candidate_set_digest": manifest.candidate_set_digest,
+            "selected_candidate": manifest.selected_candidate,
+            "selection_receipt_digest": manifest.selection_receipt_digest,
         }.items()
     ):
-        raise PlanError("planned snapshot does not match manifest fields")
+        raise PlanError("planned snapshot candidate or manifest fields do not match")
     field = next((op for op in semantic_ops if op.get("kind") == "field"), None)
     wave = next((op for op in semantic_ops if op.get("kind") == "wave"), None)
     if field is None or wave is None:
         raise PlanError("planned snapshot lacks native field or wave contract")
+    candidate_sets = [
+        operation for operation in planned.operations if operation.get("kind") == "candidate_set"
+    ]
+    selections = [
+        operation for operation in planned.operations if operation.get("kind") == "selection"
+    ]
+    if any(operation.get("kind") == "goal" for operation in planned.operations):
+        if len(candidate_sets) != 1 or len(selections) != 1:
+            raise PlanError("planned snapshot lacks candidate selection operations")
+        if (
+            candidate_sets[0].get("digest") != manifest.candidate_set_digest
+            or selections[0].get("candidate") != manifest.selected_candidate
+            or selections[0].get("receipt_digest") != manifest.selection_receipt_digest
+        ):
+            raise PlanError("planned snapshot candidate selection does not match manifest")
     machine_operations = (
         {
             "id": f"machine:kernel:{manifest.wave}",
@@ -213,10 +231,26 @@ def lower_machine(planned: NIRModule, manifest: PlanManifest) -> NIRModule:
         changed_node_ids=tuple(operation["id"] for operation in machine_operations),
         verifier_digest=manifest.verifier_digest,
     )
+    retained_ids = {operation.get("id") for operation in semantic_ops}
+    retained_ids.update(operation["id"] for operation in machine_operations)
+    machine_regions = tuple(
+        {
+            **dict(region),
+            "operations": [
+                operation_id
+                for operation_id in region.get("operations", ())
+                if operation_id in retained_ids
+            ],
+        }
+        if "operations" in region
+        else dict(region)
+        for region in planned.regions
+    )
     machine = planned.rewrite_to(
         IRPhase.MACHINE,
         delta,
         (*semantic_ops, *machine_operations),
+        regions=machine_regions,
     )
     try:
         verify_phase(machine, target=manifest.target)
