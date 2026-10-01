@@ -1,0 +1,57 @@
+#tl-bc v1
+slot 0 X 3 4 input
+const 0 X [[1.0, 0.0, 0.5, 0.2], [0.3, 1.0, 0.1, 0.4], [0.2, 0.5, 1.0, 0.3]]
+slot 1 Wq 4 4 param
+slot 2 Wk 4 4 param
+slot 3 Wv 4 4 param
+slot 4 Q 3 4 mid
+slot 5 K 3 4 mid
+slot 6 V 3 4 mid
+slot 7 d 1 input
+const 7 d [2.0]
+slot 8 scores 3 3 mid
+slot 9 attn 3 3 mid
+slot 10 ctx 3 4 mid
+slot 11 h 3 4 mid
+slot 12 W1 4 4 param
+slot 13 b1 4 param
+slot 14 f 3 4 mid
+slot 15 out 3 4 mid
+slot 16 target 3 4 input
+const 16 target [[1.0, 0.0, 0.5, 0.2], [0.3, 1.0, 0.1, 0.4], [0.2, 0.5, 1.0, 0.3]]
+slot 17 loss  mid
+slot 18 _t0 3 4 mid
+slot 19 _t1 3 4 mid
+slot 20 _t2 3 4 mid
+fwd 4 matmul 0 1
+fwd 5 matmul 0 2
+fwd 6 matmul 0 3
+fwd 8 scaled_mm_t 4 5 7
+fwd 9 softmax 8
+fwd 10 matmul 9 6
+fwd 11 add 10 0
+fwd 18 relu 11
+fwd 14 affine 18 12 13
+fwd 15 add 14 11
+fwd 19 sub 15 16
+fwd 20 square 19
+fwd 17 mean 20
+back 17 mean 20
+back 20 square 19
+back 19 sub 15 16
+back 15 add 14 11
+back 14 affine 18 12 13
+back 18 relu 11
+back 11 add 10 0
+back 10 matmul 9 6
+back 9 softmax 8
+back 8 scaled_mm_t 4 5 7
+back 6 matmul 0 3
+back 5 matmul 0 2
+back 4 matmul 0 1
+update 1
+update 2
+update 3
+update 12
+update 13
+loss 17

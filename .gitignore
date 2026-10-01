@@ -1,0 +1,32 @@
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local scratch probes and generated diagnostics
+/_*
+/dbg_*
+/diag_*
+/fix_*
+/probe_*
+/test_*
+/tmp_*
+/trace_*
+/gen_large.py
+/gen_ref.py.bak
+/genref_self.bin
+/tl_exec_diag*.py
+
+# Logs, traces, profiling output, and temporary text dumps
+/*.log
+/*.out
+/*.txt
+/*.cprof
+/*_flow.txt
+/*_blks.txt
+
+# Local native build products
+/*.exe
+/*.pdb

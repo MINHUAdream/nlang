@@ -1,0 +1,13 @@
+module demo;
+
+field x: f64[4] layout contiguous device cpu;
+
+wave add_one(x) -> delta {
+    read x;
+    write x;
+    delta add_scalar 1.0;
+    echo exact;
+    fallback reject;
+}
+
+commit add_one into x;

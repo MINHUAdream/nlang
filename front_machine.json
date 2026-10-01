@@ -1,0 +1,20 @@
+{
+  "lex": {
+    "code_len": 27589,
+    "ds": 25549,
+    "out_addr": 25981,
+    "heap_base": 27589,
+    "n_global": 45,
+    "flat": 5748,
+    "blks": 1668
+  },
+  "parse": {
+    "code_len": 15622,
+    "ds": 15222,
+    "out_addr": 15430,
+    "heap_base": 15622,
+    "n_global": 14,
+    "flat": 3000,
+    "blks": 851
+  }
+}

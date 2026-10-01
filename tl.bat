@@ -1,0 +1,3 @@
+@echo off
+rem tl 语言工具链命令入口（Windows）：tl run|check|info|train FILE.tl ...
+python "%~dp0tl.py" %*

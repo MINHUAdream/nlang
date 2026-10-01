@@ -1,0 +1,11 @@
+module planning;
+
+goal add_one {
+    target minimize cost;
+    target maximize quality;
+    require [cpu];
+    option reference { cost: 1.0; quality: 1.0; };
+    option native { cost: 0.5; quality: 0.99; };
+}
+
+synthesize add_one;
