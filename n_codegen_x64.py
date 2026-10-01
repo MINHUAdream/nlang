@@ -7,6 +7,7 @@ import math
 
 from n_ir import IRPhase, IRValidationError, NIRModule
 from n_ir_verify import verify_phase
+from n_machine_encoder_x64 import encode_add_scalar_f64x2
 from n_lir import LIRKernel, legacy_lir_view, lower_to_lir
 from n_plan import PlanError, PlanManifest
 
@@ -132,37 +133,7 @@ def lower_lir(lir: LIRKernel, manifest: PlanManifest) -> bytes:
     ):
         raise PlanError("native plan does not match typed n-LIR")
 
-    # Win64 ABI: input=RCX, rhs=RDX, output=R8, count=R9.
-    e = _X64Encoder()
-    e.push(6)
-    e.push(7)
-    e.push(3)
-    e.push(12)
-    e.mov(6, 1)
-    e.mov(7, 2)
-    e.mov(3, 8)
-    e.mov(12, 9)
-    e.shr(12, 1)
-    e.xor32(1, 1)
-    e.label("pair")
-    e.cmp(1, 12)
-    e.jge("done")
-    e.loadupd(0, 6)
-    e.loadupd(1, 7)
-    e.addpd(0, 1)
-    e.storeupd(0, 3)
-    e.add_imm32(6, 16)
-    e.add_imm32(7, 16)
-    e.add_imm32(3, 16)
-    e.inc(1)
-    e.jump("pair")
-    e.label("done")
-    e.pop(12)
-    e.pop(3)
-    e.pop(7)
-    e.pop(6)
-    e.emit(0xC3)
-    return e.finish()
+    return encode_add_scalar_f64x2()
 
 
 def lower_plan(nir: NIRModule, manifest: PlanManifest) -> bytes:

@@ -61,39 +61,9 @@ class _ExecutableKernel:
 
 
 def _build_add_f64x2() -> bytes:
-    from tl_emit import Enc
+    from n_machine_encoder_x64 import encode_add_scalar_f64x2
 
-    e = Enc()
-    e.push_r64(0x6)   # rsi: source
-    e.push_r64(0x7)   # rdi: rhs
-    e.push_r64(0x3)   # rbx: output
-    e.push_r64(0xC)   # r12: pair count
-    e.mov_r64_r64(0x6, 0x1)
-    e.mov_r64_r64(0x7, 0x2)
-    e.mov_r64_r64(0x3, 0x8)
-    e.mov_r64_r64(0xC, 0x9)
-    e.shr_r64_imm(0xC, 1)
-    e.xor_r32_r32(1, 1)
-    e.label("L_pair")
-    e.cmp_r64_r64(1, 0xC)
-    e.jge("L_done")
-    e.movupd_load_xmm(0, 0x6)
-    e.movupd_load_xmm(1, 0x7)
-    e.addpd_xmm_xmm(0, 1)
-    e.movupd_store_xmm(0, 0x3)
-    e.add_r64_imm(0x6, 16)
-    e.add_r64_imm(0x7, 16)
-    e.add_r64_imm(0x3, 16)
-    e.inc_r64(1)
-    e.jmp("L_pair")
-    e.label("L_done")
-    e.pop_r64(0xC)
-    e.pop_r64(0x3)
-    e.pop_r64(0x7)
-    e.pop_r64(0x6)
-    e.ret()
-    e.patch()
-    return bytes(e.code)
+    return encode_add_scalar_f64x2()
 
 
 class CPUSIMDBackend:
