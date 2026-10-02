@@ -1,6 +1,8 @@
 import contextlib
 import io
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 import n
@@ -62,6 +64,54 @@ class NCLITests(unittest.TestCase):
         self.assertIn(payload["selected"], {"reference_exact", "cpu_simd_sse2"})
         self.assertEqual(len(payload["selection_receipt_digest"]), 64)
         self.assertEqual(len(payload["measurements"]), 2)
+
+    def test_goal_synthesize_cli_saves_and_replays_selection_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            receipt_path = Path(directory) / "selection.json"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                first_code = n.main(
+                    [
+                        "examples/goal_synthesis.n",
+                        "--synthesize",
+                        "add_one_plan",
+                        "--samples",
+                        "1",
+                        "--warmup-samples",
+                        "0",
+                        "--selection-receipt-out",
+                        str(receipt_path),
+                        "--json",
+                    ]
+                )
+            first_payload = json.loads(output.getvalue())
+            self.assertEqual(first_code, 0)
+            self.assertTrue(receipt_path.exists())
+            saved = json.loads(receipt_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["digest"], first_payload["selection_receipt_digest"])
+
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                replay_code = n.main(
+                    [
+                        "examples/goal_synthesis.n",
+                        "--synthesize",
+                        "add_one_plan",
+                        "--samples",
+                        "1",
+                        "--warmup-samples",
+                        "0",
+                        "--selection-receipt-in",
+                        str(receipt_path),
+                        "--json",
+                    ]
+                )
+            replay_payload = json.loads(output.getvalue())
+            self.assertEqual(replay_code, 0)
+            self.assertEqual(
+                replay_payload["selection_receipt_digest"],
+                first_payload["selection_receipt_digest"],
+            )
 
 
 if __name__ == "__main__":

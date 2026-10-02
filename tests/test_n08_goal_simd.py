@@ -73,6 +73,39 @@ class GoalSelectionCompilerTests(unittest.TestCase):
         with self.assertRaisesRegex(PlanError, "receipt"):
             verify_selection_receipt(result.manifest, result.semantic, forged_receipt)
 
+    def test_goal_selection_can_replay_a_saved_receipt(self):
+        first = compile_source(
+            GOAL_SOURCE,
+            initial={"x": [1.0, 2.0, 3.0, 4.0]},
+            samples=1,
+            warmup_samples=0,
+        )
+        replayed = compile_source(
+            GOAL_SOURCE,
+            initial={"x": [1.0, 2.0, 3.0, 4.0]},
+            samples=1,
+            warmup_samples=0,
+            selection_receipt=first.selection_receipt,
+        )
+        self.assertEqual(replayed.manifest.selection_receipt_digest, first.manifest.selection_receipt_digest)
+        self.assertEqual(replayed.code, first.code)
+
+    def test_goal_replay_rejects_a_different_workload(self):
+        first = compile_source(
+            GOAL_SOURCE,
+            initial={"x": [1.0, 2.0, 3.0, 4.0]},
+            samples=1,
+            warmup_samples=0,
+        )
+        with self.assertRaisesRegex(PlanError, "workload"):
+            compile_source(
+                GOAL_SOURCE,
+                initial={"x": [4.0, 3.0, 2.0, 1.0]},
+                samples=1,
+                warmup_samples=0,
+                selection_receipt=first.selection_receipt,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,9 +1,16 @@
+import json
 import unittest
 from dataclasses import replace
 
 from n_front import parse
 from n_backend_types import Capability
-from n_goal import CandidateMeasurement, CandidateSpec, candidate_specs, select_measured
+from n_goal import (
+    CandidateMeasurement,
+    CandidateSpec,
+    SelectionReceipt,
+    candidate_specs,
+    select_measured,
+)
 from n_ir import lower
 from n_measure import measure, measure_candidates
 from n_rtm import Delta
@@ -12,6 +19,61 @@ from tests.test_n08_goal_simd import GOAL_SOURCE
 
 
 class CandidateMeasurementTests(unittest.TestCase):
+    def test_selection_receipt_round_trips_canonically(self):
+        semantic = lower(parse(GOAL_SOURCE))
+        candidates = candidate_specs(semantic, "add_one_plan")
+        measurements = measure_candidates(
+            GOAL_SOURCE,
+            {"x": [1.0, 2.0, 3.0, 4.0]},
+            candidates,
+            samples=1,
+            warmup_samples=0,
+        )
+        receipt = select_measured("add_one_plan", candidates, measurements)
+        encoded = receipt.canonical_json()
+        restored = SelectionReceipt.from_json(encoded)
+        self.assertEqual(restored, receipt)
+        self.assertEqual(restored.canonical_json(), encoded)
+
+    def test_selection_receipt_rejects_missing_or_tampered_digest(self):
+        semantic = lower(parse(GOAL_SOURCE))
+        candidates = candidate_specs(semantic, "add_one_plan")
+        measurements = measure_candidates(
+            GOAL_SOURCE,
+            {"x": [1.0, 2.0, 3.0, 4.0]},
+            candidates,
+            samples=1,
+            warmup_samples=0,
+        )
+        payload = select_measured("add_one_plan", candidates, measurements).to_dict()
+        payload.pop("digest")
+        with self.assertRaisesRegex(ValueError, "digest"):
+            SelectionReceipt.from_dict(payload)
+        payload = select_measured("add_one_plan", candidates, measurements).to_dict()
+        payload["digest"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "digest"):
+            SelectionReceipt.from_dict(payload)
+
+    def test_selection_rejects_incomplete_or_duplicate_candidate_set(self):
+        binding = {
+            "source_digest": "a" * 64,
+            "workload_digest": "b" * 64,
+            "benchmark_digest": "c" * 64,
+            "hardware_digest": "d" * 64,
+        }
+        candidates = (
+            CandidateSpec("reference_exact", "reference", ("reference",)),
+            CandidateSpec("cpu_simd_sse2", "native", ("cpu",)),
+        )
+        reference = CandidateMeasurement(
+            "reference_exact", "committed", 1.0, 1.0, 0.0, 0.0, 0.0, 1, **binding
+        )
+        incomplete = select_measured("g", candidates, (reference,))
+        self.assertIsNone(incomplete.selected_candidate)
+        self.assertIn("candidate set", incomplete.detail or "")
+        duplicate = select_measured("g", candidates, (reference, reference))
+        self.assertIsNone(duplicate.selected_candidate)
+        self.assertIn("candidate set", duplicate.detail or "")
     def test_candidates_share_workload_binding_and_unknown_cost_is_not_zero(self):
         semantic = lower(parse(GOAL_SOURCE))
         candidates = candidate_specs(semantic, "add_one_plan")

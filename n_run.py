@@ -11,6 +11,7 @@ from n_backend_tl import ReferenceBackend, TLNativeBackend
 from n_backend_simd import CPUSIMDBackend
 from n_compile import compile_source
 from n_front import parse
+from n_goal import SelectionReceipt
 from n_ir import lower
 from n_measure import measure
 from n_native import NativeBackend
@@ -40,15 +41,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--samples", type=int, default=5)
     parser.add_argument("--warmup-samples", type=int, default=1)
     parser.add_argument("--synthesize", metavar="GOAL")
+    parser.add_argument("--selection-receipt-in", type=Path)
+    parser.add_argument("--selection-receipt-out", type=Path)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     source = args.source.read_text(encoding="utf-8")
     if args.synthesize:
+        saved_receipt = None
+        if args.selection_receipt_in is not None:
+            saved_receipt = SelectionReceipt.from_json(
+                args.selection_receipt_in.read_text(encoding="utf-8")
+            )
         compilation = compile_source(
             source,
             initial=_default_initial(source),
             samples=args.samples,
             warmup_samples=args.warmup_samples,
+            selection_receipt=saved_receipt,
         )
         decision = compilation.goal_decision
         receipt = compilation.selection_receipt
@@ -64,6 +73,12 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 2
+        if args.selection_receipt_out is not None:
+            args.selection_receipt_out.parent.mkdir(parents=True, exist_ok=True)
+            args.selection_receipt_out.write_text(
+                receipt.canonical_json() + "\n",
+                encoding="utf-8",
+            )
         payload = dict(decision.__dict__)
         payload.update(
             {

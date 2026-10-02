@@ -311,6 +311,19 @@ NPU/CXL 不会伪造可用执行器。当前仍未实现 GPU tile、NPU SRAM 和
 更宽泛的目标搜索继续保持 `open`。状态为
 `implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`。
 
+## n 0.8-B SelectionReceipt 回放审计（2026-10-02）
+
+| 检查项 | 当前证据 | 尚未关闭的实现风险 |
+| --- | --- | --- |
+| 规范序列化 | `SelectionReceipt`/`CandidateMeasurement` canonical JSON round-trip；digest 缺失或篡改拒绝 | 跨进程签名、密钥轮换、artifact store |
+| 候选集完整性 | 回放要求每个声明候选恰好一次，缺失/重复/额外候选拒绝 | 通用多目标候选图仍未实现 |
+| 回放绑定 | source/workload/benchmark/hardware digest 重新计算并逐项比对 | 硬件漂移采样、能耗/频率和置信区间 |
+| lowering 门 | 回放通过 `verify_selection_receipt` 后才进入 planned/machine 与 native verifier | 二进制 `.nir/.nib` codec、跨版本 adapter |
+
+该轮将“可保存的选择结果”和“重新测量”明确分开：回放不伪造新的延迟数据，也不把旧
+receipt 扩展成跨硬件性能声明。当前状态为
+`implemented_in_native_slice / measured_goal_cpu_simd / replayable_selection / generalization_open`。
+
 ## 风险闭环与可证明边界
 
 以下编号对应上面 60 项风险，按主要关闭证据分类；类别不是风险严重度。RuntimeRoot 不变量会横切若干实现项，因此另列覆盖项，不重复计数。

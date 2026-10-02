@@ -447,6 +447,17 @@ python -m unittest discover -s tests -p "test_n_*.py" -v
 
 状态标签：`implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`。
 
+### n 0.8-B Selection Receipt Replay（2026-10-02）
+
+0.8-B 为 measured selection 增加了可持久化、可校验的规范 receipt。`SelectionReceipt`
+和 `CandidateMeasurement` 支持 canonical JSON round-trip；缺失或篡改 digest、未知策略、
+缺失/重复候选都会 fail closed。回放路径不重新测量候选，而是重新验证 source、workload、
+benchmark protocol、hardware、候选集和 receipt digest，随后复用相同的 planned -> machine
+lowering。命令行通过 `--selection-receipt-in` 与 `--selection-receipt-out` 读写回执。
+
+回放证据只对绑定的主机、工作负载、采样参数和当前实现有效；它不提供跨硬件或跨 workload
+的性能结论。跨进程签名、通用 artifact store、二进制 `.nir/.nib` codec 仍未实现。
+
 ## n 原生编译纵切 0.50（2026-10-01）
 
 架构主线已收敛为 n：`.n -> n_front -> NIR -> PlanManifest -> n-LIR -> n-owned x86-64

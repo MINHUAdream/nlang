@@ -1,6 +1,6 @@
-# n 0.8-A Package
+# n 0.8 Package
 
-状态：`implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`
+状态：`implemented_in_native_slice / measured_goal_cpu_simd / replayable_selection / generalization_open`
 
 本包把 n 的 measured goal 与 CPU SIMD 原生纵切收敛到现有 `tl-lang` 项目。旧 `.tl`
 自举材料和兼容回归保留；`.n` 路径的权威链为：
@@ -19,6 +19,23 @@
 - n-owned `n_machine_encoder_x64.py`，与 0.7 add-scalar 机器码摘要兼容。
 - `examples/goal_synthesis.n` 可直接测量执行。
 - fallback、Echo 失败、candidate mutation 和 digest binding 回归测试。
+
+## 0.8-B 回执持久化与回放
+
+`SelectionReceipt` 可以通过规范 JSON 保存和恢复。恢复时必须提供 receipt digest，
+并且 digest 必须与 canonical contents 一致；缺失、篡改或未知 selection policy 会被拒绝。
+回放不会重新搜索候选，而是验证完整候选集（每个候选恰好一次）、source/workload/
+benchmark/hardware 四类绑定、candidate-set digest 与 machine plan，再进入同一 lowering
+链。CLI 支持：
+
+```text
+python n_run.py examples/goal_synthesis.n --synthesize add_one_plan \
+  --selection-receipt-out selection.json --json
+python n_run.py examples/goal_synthesis.n --synthesize add_one_plan \
+  --selection-receipt-in selection.json --json
+```
+
+这是同一主机、同一 workload 和同一测量协议下的证据回放，不是跨硬件性能保证。
 
 测量回执包含真实 p50/p99，因此同一源码在不同运行中可能产生不同的
 `selection_receipt_digest`、planned/machine snapshot digest；这是证据版本变化，不是
@@ -49,7 +66,7 @@ hardware/benchmark/result 摘要以及 p50/p99、验证成本、搜索次数、�
 
 | 文件 | 作用 |
 | --- | --- |
-| `n_goal.py` | 候选规格、测量回执与 fail-closed 选择 |
+| `n_goal.py` | 候选规格、规范回执序列化与 fail-closed 选择 |
 | `n_measure.py` | 候选测量和 RTM workload receipt |
 | `n_compile.py` | measured goal 到 planned/machine nIR 的编译入口 |
 | `n_machine_encoder_x64.py` | n-owned x86-64/SSE2 指令编码 |

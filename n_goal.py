@@ -76,6 +76,39 @@ class CandidateMeasurement:
             "hardware_digest": self.hardware_digest,
         }
 
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> "CandidateMeasurement":
+        if not isinstance(payload, Mapping):
+            raise ValueError("candidate measurement must be an object")
+        required = (
+            "candidate",
+            "status",
+            "p50_ms",
+            "p99_ms",
+            "quality_loss",
+            "verification_cost_ms",
+            "fallback_rate",
+            "commit_count",
+        )
+        missing = [name for name in required if name not in payload]
+        if missing:
+            raise ValueError("candidate measurement is missing: " + ", ".join(missing))
+        return cls(
+            str(payload["candidate"]),
+            str(payload["status"]),
+            payload["p50_ms"],
+            payload["p99_ms"],
+            payload["quality_loss"],
+            payload["verification_cost_ms"],
+            payload["fallback_rate"],
+            payload["commit_count"],
+            payload.get("detail"),
+            payload.get("source_digest"),
+            payload.get("workload_digest"),
+            payload.get("benchmark_digest"),
+            payload.get("hardware_digest"),
+        )
+
 
 @dataclass(frozen=True)
 class SelectionReceipt:
@@ -113,6 +146,60 @@ class SelectionReceipt:
             "digest": self.digest,
         }
 
+    def canonical_json(self) -> str:
+        return json.dumps(
+            self.to_dict(),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, object]) -> "SelectionReceipt":
+        if not isinstance(payload, Mapping):
+            raise ValueError("selection receipt must be an object")
+        required = (
+            "goal",
+            "policy",
+            "candidate_set_digest",
+            "selected_candidate",
+            "search_count",
+            "measurements",
+            "detail",
+            "digest",
+        )
+        missing = [name for name in required if name not in payload]
+        if missing:
+            raise ValueError("selection receipt is missing: " + ", ".join(missing))
+        if payload["policy"] != "adaptive-fastest":
+            raise ValueError("unsupported selection policy")
+        raw_measurements = payload["measurements"]
+        if not isinstance(raw_measurements, (list, tuple)):
+            raise ValueError("selection receipt measurements must be an array")
+        receipt = cls(
+            str(payload["goal"]),
+            str(payload["policy"]),
+            str(payload["candidate_set_digest"]),
+            None if payload["selected_candidate"] is None else str(payload["selected_candidate"]),
+            int(payload["search_count"]),
+            tuple(CandidateMeasurement.from_dict(item) for item in raw_measurements),
+            payload["detail"],
+        )
+        digest = payload["digest"]
+        if not isinstance(digest, str) or len(digest) != 64:
+            raise ValueError("selection receipt digest is missing or malformed")
+        if receipt.digest != digest:
+            raise ValueError("selection receipt digest does not match its contents")
+        return receipt
+
+    @classmethod
+    def from_json(cls, encoded: str) -> "SelectionReceipt":
+        try:
+            payload = json.loads(encoded)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise ValueError("selection receipt JSON is invalid") from exc
+        return cls.from_dict(payload)
+
 
 def _decision_digest(payload: Mapping[str, object]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
@@ -149,7 +236,20 @@ def select_measured(
     *,
     policy: str = "adaptive-fastest",
 ) -> SelectionReceipt:
+    if policy != "adaptive-fastest":
+        raise ValueError(f"unsupported selection policy {policy!r}")
     candidate_names = {candidate.name for candidate in candidates}
+    measured_names = [measurement.candidate for measurement in measurements]
+    if len(measured_names) != len(set(measured_names)) or set(measured_names) != candidate_names:
+        return SelectionReceipt(
+            goal_name,
+            policy,
+            candidate_set_digest(candidates),
+            None,
+            len(candidates),
+            tuple(measurements),
+            "candidate set is incomplete or contains duplicates",
+        )
     committed = [
         measurement
         for measurement in measurements

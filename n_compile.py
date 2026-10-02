@@ -20,7 +20,7 @@ from n_front import parse
 from n_ir import NIRModule, lower
 from n_ir_verify import verify_phase
 from n_lir import LIRKernel, legacy_lir_view, lower_machine
-from n_plan import PlanError, PlanManifest, plan_module
+from n_plan import PlanError, PlanManifest, plan_module, verify_selection_receipt
 from n_rtm import Runtime
 
 
@@ -255,11 +255,58 @@ def compile_source(
     initial: Mapping[str, Sequence[float]] | None = None,
     samples: int = 3,
     warmup_samples: int = 1,
+    selection_receipt: SelectionReceipt | Mapping[str, object] | None = None,
 ) -> Compilation:
     module = parse(source)
     semantic = lower(module)
     has_goal = any(node.get("kind") == "synthesize" for node in semantic.operations)
     if has_goal:
+        if selection_receipt is not None:
+            if isinstance(selection_receipt, Mapping):
+                selection_receipt = SelectionReceipt.from_dict(selection_receipt)
+            if not isinstance(selection_receipt, SelectionReceipt):
+                raise PlanError("selection receipt has an unsupported type")
+            from n_measure import selection_bindings
+
+            workload = _goal_initial(semantic, initial)
+            if target != "x86_64-windows":
+                raise PlanError(f"unsupported native target {target!r}")
+            bindings = selection_bindings(
+                source,
+                workload,
+                samples=samples,
+                warmup_samples=warmup_samples,
+            )
+            manifest = PlanManifest.create(
+                source,
+                semantic,
+                target=target,
+                selected_candidate=selection_receipt.selected_candidate,
+                selection_receipt_digest=selection_receipt.digest,
+            )
+            verify_selection_receipt(
+                manifest,
+                semantic,
+                selection_receipt,
+                bindings=bindings,
+            )
+            decision = GoalDecision(
+                selection_receipt.goal,
+                selection_receipt.selected_candidate,
+                selection_receipt.search_count,
+                "selected",
+                selection_receipt.digest,
+                selection_receipt.detail,
+                selection_receipt.candidate_set_digest,
+                selection_receipt.digest,
+            )
+            return _compile_semantic(
+                source,
+                semantic,
+                manifest,
+                goal_decision=decision,
+                selection_receipt=selection_receipt,
+            )
         goal_decision, selection = _measure_goal_selection(
             source,
             semantic,

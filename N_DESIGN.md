@@ -2652,3 +2652,16 @@ codegen 仍只接受通过 machine verifier 的 snapshot。SIMD 不可用时自�
 `add_scalar`。GPU tile、NPU SRAM、CXL executor、通用 SSA/CFG、完整寄存器分配、
 自举和跨 workload 性能结论仍为 `open`，必须由目标硬件上的新鲜回执关闭。状态标签：
 `implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`。
+
+### 22.1 n 0.8-B SelectionReceipt 回放
+
+`SelectionReceipt` 是 measured goal 的可持久化证据对象，而不是新的运行时状态旁路。
+其 canonical JSON 包含 receipt digest；恢复必须验证 digest、`adaptive-fastest` 策略、
+完整候选集和每个候选的 source/workload/benchmark/hardware digest。`compile_source` 在
+回放模式跳过候选重新测量，但必须重新计算当前绑定并通过 `verify_selection_receipt`，
+然后才构造 planned/machine snapshot。任一绑定不符、候选缺失或重复、receipt 与 manifest
+不一致，都拒绝 lowering/执行。
+
+CLI 的 `--selection-receipt-out` 保存规范回执，`--selection-receipt-in` 读取并回放。该
+能力只证明相同声明域内的可重现选择，不提供签名、跨硬件性能证明或一般 artifact store；
+这些仍保持 `open`。

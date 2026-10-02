@@ -47,6 +47,32 @@ def _hardware_digest() -> str:
     )
 
 
+def selection_bindings(
+    source: str,
+    initial: Mapping[str, Sequence[float]],
+    *,
+    samples: int,
+    warmup_samples: int,
+) -> dict[str, str]:
+    """Return the immutable bindings required to replay goal selection."""
+
+    return {
+        "source_digest": hashlib.sha256(source.encode("utf-8")).hexdigest(),
+        "workload_digest": _digest(
+            {name: list(values) for name, values in sorted(initial.items())}
+        ),
+        "benchmark_digest": _digest(
+            {
+                "samples": samples,
+                "warmup_samples": warmup_samples,
+                "measured_region": "rtm.run:prepare+execute+echo+commit",
+                "selection_policy": "adaptive-fastest",
+            }
+        ),
+        "hardware_digest": _hardware_digest(),
+    }
+
+
 def _percentile(values: Sequence[float], percentile: float) -> float | None:
     if not values:
         return None
@@ -74,19 +100,12 @@ def measure_candidates(
         raise ValueError("samples must be positive")
     if warmup_samples < 0:
         raise ValueError("warmup_samples cannot be negative")
-    source_digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
-    workload_digest = _digest(
-        {name: list(values) for name, values in sorted(initial.items())}
+    bindings = selection_bindings(
+        source,
+        initial,
+        samples=samples,
+        warmup_samples=warmup_samples,
     )
-    benchmark_digest = _digest(
-        {
-            "samples": samples,
-            "warmup_samples": warmup_samples,
-            "measured_region": "rtm.run:prepare+execute+echo+commit",
-            "selection_policy": "adaptive-fastest",
-        }
-    )
-    hardware_digest = _hardware_digest()
     semantic = lower(parse(source))
     results: list[CandidateMeasurement] = []
     for candidate in candidates:
@@ -117,10 +136,7 @@ def measure_candidates(
         results.append(
             replace(
                 measurement,
-                source_digest=source_digest,
-                workload_digest=workload_digest,
-                benchmark_digest=benchmark_digest,
-                hardware_digest=hardware_digest,
+                **bindings,
             )
         )
     return tuple(results)
@@ -474,4 +490,4 @@ def measure(
     )
 
 
-__all__ = ["RTMReceipt", "measure", "measure_candidates"]
+__all__ = ["RTMReceipt", "measure", "measure_candidates", "selection_bindings"]

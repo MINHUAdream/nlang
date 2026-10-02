@@ -340,6 +340,7 @@ def verify_selection_receipt(
     semantic: NIRModule,
     receipt: SelectionReceipt,
     *,
+    bindings: Mapping[str, str] | None = None,
     hardware_digest: str | None = None,
 ) -> None:
     """Verify measured goal evidence before a selected plan can execute."""
@@ -358,6 +359,17 @@ def verify_selection_receipt(
         raise PlanError("selection receipt candidate does not match manifest")
     if receipt.digest != manifest.selection_receipt_digest:
         raise PlanError("selection receipt digest does not match manifest")
+    expected_names = {candidate.name for candidate in candidates}
+    measured_names = [item.candidate for item in receipt.measurements]
+    if len(measured_names) != len(set(measured_names)) or set(measured_names) != expected_names:
+        raise PlanError("selection receipt candidate set is incomplete or contains duplicates")
+    expected_bindings = dict(bindings or {})
+    if hardware_digest is not None:
+        expected_bindings["hardware_digest"] = hardware_digest
+    for item in receipt.measurements:
+        for field, expected in expected_bindings.items():
+            if getattr(item, field, None) != expected:
+                raise PlanError(f"selection receipt {field} does not match replay workload")
     replayed = select_measured(
         goal_name,
         candidates,
