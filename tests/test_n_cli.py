@@ -6,6 +6,8 @@ import tempfile
 import unittest
 
 import n
+from n_ir import IRPhase
+from n_ir_codec import read_nir
 
 
 class NCLITests(unittest.TestCase):
@@ -112,6 +114,50 @@ class NCLITests(unittest.TestCase):
                 replay_payload["selection_receipt_digest"],
                 first_payload["selection_receipt_digest"],
             )
+
+    def test_n_entrypoint_emits_semantic_nir_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            artifact_path = Path(directory) / "module.nir"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = n.main(
+                    [
+                        "examples/rtm_add_one.n",
+                        "--emit-nir",
+                        str(artifact_path),
+                        "--json",
+                    ]
+                )
+            payload = json.loads(output.getvalue())
+            artifact = read_nir(artifact_path)
+            self.assertEqual(code, 0)
+            self.assertEqual(payload["status"], "emitted")
+            self.assertEqual(payload["phase"], IRPhase.SEMANTIC.value)
+            self.assertEqual(payload["nir_digest"], artifact.digest)
+            self.assertEqual(payload["bytes"], artifact_path.stat().st_size)
+
+    def test_n_entrypoint_emits_verified_planned_and_machine_phases(self):
+        for phase in ("planned", "machine"):
+            with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
+                artifact_path = Path(directory) / f"{phase}.nir"
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    code = n.main(
+                        [
+                            "examples/rtm_add_one.n",
+                            "--emit-nir",
+                            str(artifact_path),
+                            "--emit-phase",
+                            phase,
+                            "--json",
+                        ]
+                    )
+                payload = json.loads(output.getvalue())
+                artifact = read_nir(artifact_path)
+                self.assertEqual(code, 0)
+                self.assertEqual(payload["phase"], phase)
+                self.assertEqual(artifact.phase.value, phase)
+                self.assertEqual(payload["nir_digest"], artifact.digest)
 
 
 if __name__ == "__main__":

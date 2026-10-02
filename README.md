@@ -468,6 +468,20 @@ lowering。命令行通过 `--selection-receipt-in` 与 `--selection-receipt-out
 该 codec 只保证 artifact 完整性与跨进程可恢复，不提供签名、schema migration、通用
 artifact store 或跨硬件性能结论。
 
+### n 0.8-D CLI nIR Artifact Emission（2026-10-03）
+
+`n-run` 现在可以直接把 `.n` 源码导出为确定性的 `.nir` artifact：
+
+```text
+python n_run.py examples/rtm_add_one.n --emit-nir out/semantic.nir --json
+python n_run.py examples/rtm_add_one.n --emit-nir out/machine.nir --emit-phase machine --json
+```
+
+默认 phase 为 `semantic`。`planned` 和 `machine` 导出会复用完整的
+`compile_source -> PlanManifest -> phase verifier` 链；导出失败时不会写出不完整
+artifact。JSON 回执报告 `phase`、`nir_digest` 和 `bytes`，不把 artifact 完整性误报为
+签名、性能或跨硬件真实性证明。
+
 ## n 原生编译纵切 0.50（2026-10-01）
 
 架构主线已收敛为 n：`.n -> n_front -> NIR -> PlanManifest -> n-LIR -> n-owned x86-64

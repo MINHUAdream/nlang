@@ -226,7 +226,7 @@ AI-first 还延伸到语言自身：AI 可直接生成规范 n-IR，并用带基
 | 项目 | 当前证据 | 边界 |
 | --- | --- | --- |
 | 新 `.n` 前端 | `n_front.py` 解析 field/wave/echo/commit/goal/synthesize，11 个新测试覆盖 | 仅支持 `add_scalar` 单 field 子集 |
-| NIR-RTM | `n_ir.py` 规范 JSON、SHA-256 digest、round-trip 测试通过 | 尚未实现二进制 `.nir` codec |
+| NIR-RTM | `n_ir.py` 规范 JSON、SHA-256 digest、round-trip 测试通过；`n_ir_codec.py` 已覆盖 `.nir` envelope | 尚无签名、schema migration 和远端 artifact store |
 | 原子状态提交 | `n_rtm.py` 的 epoch/stale/fail/unknown 语义测试通过 | 尚未实现异步 branch/merge |
 | CPU 后端 | Reference 与现有 `kernels.dll` 的 `TLNativeBackend` 都实跑成功 | 还不是完整 SIMD/tile 计划器 |
 | 测量回执 | `n_measure.py` 绑定 source/NIR/workload/hardware、p50/p99、验证/回退 | 质量门目前是 exact=0，尚未接真实误差预算 |
@@ -269,7 +269,7 @@ NPU/CXL 不会伪造可用执行器。当前仍未实现 GPU tile、NPU SRAM 和
 | --- | --- | --- |
 | IR 数量 | 一个权威 `NIRModule` 数据模型 | `LIRKernel` 仍存在于兼容 API，不能再承载新语义 |
 | 阶段边界 | `semantic -> planned -> machine` 已进入编译路径 | operation 集仍是 add-scalar 窄子集，非通用 SSA/CFG |
-| lowering | `RewriteDelta` 与父摘要链已实现 | 物理 arena 结构共享、增量摘要和二进制 codec 未实现 |
+| lowering | `RewriteDelta` 与父摘要链已实现 | 物理 arena 结构共享和增量摘要未实现 |
 | PlanManifest | v2 外部索引分两段绑定 planned/machine digest | 通用候选 admission、签名与跨进程 schema 升级未实现 |
 | 代码生成 | 新入口只接受 verified machine snapshot | 寄存器分配、目标文件、链接器与第二个实质目标未实现 |
 | 契约保留 | field/wave/commit、numeric/fallback/effect 引用进入 machine | ownership/RealityTag/通用误差传播尚未进入机器 verifier |
@@ -335,6 +335,17 @@ receipt 扩展成跨硬件性能声明。当前状态为
 
 该轮只关闭本地 `.nir` artifact 的确定性编码与完整性检查，不把摘要校验误报为真实性
 签名或跨设备性能证据。
+
+## n 0.8-D CLI artifact emission 审计（2026-10-03）
+
+| 检查项 | 当前证据 | 尚未关闭的实现风险 |
+| --- | --- | --- |
+| semantic 导出 | `n-run --emit-nir PATH` 直接降低 `.n` 并写入 codec；不触发测量 | 多模块/增量编译入口尚未实现 |
+| planned/machine 导出 | `--emit-phase` 复用 `compile_source`、`PlanManifest` 和 phase verifier | 仍只覆盖 x86-64/SSE2 add-scalar 窄域 |
+| 回执 | 返回 artifact path、phase、nIR digest、byte length；文件可由 `read_nir` 恢复 | 没有签名、远端信任根或 provenance store |
+| 错误边界 | codec 拒绝不完整或非 canonical 内容；编译/验证失败不应提交 artifact | CLI 错误格式和多文件批处理仍待统一 |
+
+该轮只证明 CLI 与既有 nIR codec 的接线正确，不扩大 n 的硬件、性能或自举结论。
 
 ## 风险闭环与可证明边界
 

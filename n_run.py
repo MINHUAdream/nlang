@@ -12,7 +12,8 @@ from n_backend_simd import CPUSIMDBackend
 from n_compile import compile_source
 from n_front import parse
 from n_goal import SelectionReceipt
-from n_ir import lower
+from n_ir import IRPhase, lower
+from n_ir_codec import write_nir
 from n_measure import measure
 from n_native import NativeBackend
 
@@ -43,15 +44,49 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--synthesize", metavar="GOAL")
     parser.add_argument("--selection-receipt-in", type=Path)
     parser.add_argument("--selection-receipt-out", type=Path)
+    parser.add_argument("--emit-nir", type=Path)
+    parser.add_argument(
+        "--emit-phase",
+        choices=tuple(phase.value for phase in IRPhase),
+        default=IRPhase.SEMANTIC.value,
+        help="nIR phase to emit when --emit-nir is provided",
+    )
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     source = args.source.read_text(encoding="utf-8")
-    if args.synthesize:
-        saved_receipt = None
-        if args.selection_receipt_in is not None:
-            saved_receipt = SelectionReceipt.from_json(
-                args.selection_receipt_in.read_text(encoding="utf-8")
+    saved_receipt = None
+    if args.selection_receipt_in is not None:
+        saved_receipt = SelectionReceipt.from_json(
+            args.selection_receipt_in.read_text(encoding="utf-8")
+        )
+    if args.emit_nir is not None:
+        if args.emit_phase == IRPhase.SEMANTIC.value:
+            artifact = lower(parse(source))
+        else:
+            compilation = compile_source(
+                source,
+                initial=_default_initial(source),
+                samples=args.samples,
+                warmup_samples=args.warmup_samples,
+                selection_receipt=saved_receipt,
             )
+            artifact = (
+                compilation.planned
+                if args.emit_phase == IRPhase.PLANNED.value
+                else compilation.machine
+            )
+        args.emit_nir.parent.mkdir(parents=True, exist_ok=True)
+        write_nir(args.emit_nir, artifact)
+        payload = {
+            "status": "emitted",
+            "artifact": str(args.emit_nir),
+            "phase": artifact.phase.value,
+            "nir_digest": artifact.digest,
+            "bytes": args.emit_nir.stat().st_size,
+        }
+        print(json.dumps(payload, sort_keys=True, ensure_ascii=False))
+        return 0
+    if args.synthesize:
         compilation = compile_source(
             source,
             initial=_default_initial(source),

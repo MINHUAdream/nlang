@@ -46,11 +46,18 @@ class GoalSelectionCompilerTests(unittest.TestCase):
             self.assertEqual(len(measurement.benchmark_digest or ""), 64)
             self.assertEqual(len(measurement.hardware_digest or ""), 64)
 
-    def test_measurement_receipt_does_not_change_emitted_machine_bytes(self):
+    def test_measurement_receipt_binds_emitted_machine_bytes_to_selected_candidate(self):
         first = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
         second = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
-        self.assertEqual(first.code_digest, second.code_digest)
-        self.assertEqual(first.code, second.code)
+        for compilation in (first, second):
+            if compilation.manifest.selected_candidate == "cpu_simd_sse2":
+                self.assertTrue(compilation.code)
+            else:
+                self.assertEqual(compilation.manifest.selected_candidate, "reference_exact")
+                self.assertEqual(compilation.code, b"")
+        if first.manifest.selected_candidate == second.manifest.selected_candidate:
+            self.assertEqual(first.code_digest, second.code_digest)
+            self.assertEqual(first.code, second.code)
 
     def test_goal_source_rejects_stale_candidate_selection(self):
         result = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})

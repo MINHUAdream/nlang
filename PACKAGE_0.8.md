@@ -48,6 +48,20 @@ semantic/planned/machine digest 或 lowering。
 当前 API：`encode_nir`、`decode_nir`、`write_nir`、`read_nir`。这是跨进程 artifact
 完整性与缓存的基础，不等同于签名、schema migration 或一般 artifact store。
 
+## 0.8-D CLI artifact emission
+
+`n-run --emit-nir PATH` 现在可以从 `.n` 源码直接写出经过 codec 校验的 `.nir` 文件。
+默认导出 `semantic` phase；需要导出后续快照时必须显式指定：
+
+```text
+python n_run.py examples/rtm_add_one.n --emit-nir out/semantic.nir --json
+python n_run.py examples/rtm_add_one.n --emit-nir out/machine.nir --emit-phase machine --json
+```
+
+`--emit-phase planned|machine` 复用 `compile_source` 的计划、目标和 phase verifier，
+不会绕过 `PlanManifest` 或机器码 lowering。导出回执包含 artifact 路径、phase、nIR
+digest 和字节数；它是可恢复的编译中间产物，不是性能回执，也不代表跨硬件真实性。
+
 测量回执包含真实 p50/p99，因此同一源码在不同运行中可能产生不同的
 `selection_receipt_digest`、planned/machine snapshot digest；这是证据版本变化，不是
 代码不稳定。只要选中的候选和契约不变，n-owned machine `code_digest` 与字节码保持
@@ -80,6 +94,7 @@ hardware/benchmark/result 摘要以及 p50/p99、验证成本、搜索次数、�
 | `n_goal.py` | 候选规格、规范回执序列化与 fail-closed 选择 |
 | `n_measure.py` | 候选测量和 RTM workload receipt |
 | `n_ir_codec.py` | n-ir/0.7 semantic/planned/machine 二进制 artifact 编解码 |
+| `n_run.py` | `.n` 执行、goal 回放与 `.nir` artifact 导出 |
 | `n_compile.py` | measured goal 到 planned/machine nIR 的编译入口 |
 | `n_machine_encoder_x64.py` | n-owned x86-64/SSE2 指令编码 |
 | `n_codegen_x64.py` | machine nIR 验证后代码生成 |

@@ -2676,3 +2676,13 @@ version、payload length、payload SHA-256 与 canonical JSON payload。`encode_
 要求 `n-ir/0.7`，再比较 payload 与模块的 canonical JSON。截断、尾随字节、未知版本、
 长度/摘要不符、旧 schema、非 canonical JSON 和超过 64 MiB 的 payload 都拒绝。签名、
 schema migration、artifact store 和跨设备 provenance 仍属于后续能力。
+
+### 22.3 n 0.8-D CLI artifact emission
+
+`.n` 源码可以通过 `n-run --emit-nir PATH` 生成同一 codec 的 `.nir` 文件。默认目标是
+`semantic` snapshot，确保纯前端导出不触发测量或设备探测；`--emit-phase planned` 和
+`--emit-phase machine` 才会调用完整编译链，并要求 `PlanManifest`、结构/语义/phase
+和目标 verifier 全部通过。这样 artifact 导出不会成为绕过契约的旁路。
+
+导出回执只承诺 artifact 路径、phase、nIR digest 和文件长度。它不承诺签名、跨版本
+可执行性或任何性能结论；性能仍必须来自绑定 workload 的 `MeasurementReceipt`。
