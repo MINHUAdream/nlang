@@ -324,6 +324,18 @@ NPU/CXL 不会伪造可用执行器。当前仍未实现 GPU tile、NPU SRAM 和
 receipt 扩展成跨硬件性能声明。当前状态为
 `implemented_in_native_slice / measured_goal_cpu_simd / replayable_selection / generalization_open`。
 
+## n 0.8-C `.nir` artifact codec 审计（2026-10-02）
+
+| 检查项 | 当前证据 | 尚未关闭的实现风险 |
+| --- | --- | --- |
+| phase round-trip | semantic/planned/machine 三阶段保持 phase、module digest 和 canonical bytes | 大型 arena/结构共享仍未实现 |
+| envelope 完整性 | magic/version/length/SHA-256 与 canonical JSON 全部校验 | 没有签名、密钥轮换和远端信任根 |
+| 输入拒绝 | 截断、尾随、重复 key、旧 schema、非 canonical JSON 和超大 payload 有回归测试 | schema migration adapter、artifact store 仍开放 |
+| 语义边界 | codec 不改变 nIR phase、计划、机器码或 RTM 行为 | 还没有 `.nib` 程序包和跨版本 provenance 索引 |
+
+该轮只关闭本地 `.nir` artifact 的确定性编码与完整性检查，不把摘要校验误报为真实性
+签名或跨设备性能证据。
+
 ## 风险闭环与可证明边界
 
 以下编号对应上面 60 项风险，按主要关闭证据分类；类别不是风险严重度。RuntimeRoot 不变量会横切若干实现项，因此另列覆盖项，不重复计数。

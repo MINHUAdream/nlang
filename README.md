@@ -456,7 +456,17 @@ benchmark protocol、hardware、候选集和 receipt digest，随后复用相同
 lowering。命令行通过 `--selection-receipt-in` 与 `--selection-receipt-out` 读写回执。
 
 回放证据只对绑定的主机、工作负载、采样参数和当前实现有效；它不提供跨硬件或跨 workload
-的性能结论。跨进程签名、通用 artifact store、二进制 `.nir/.nib` codec 仍未实现。
+的性能结论。跨进程签名、通用 artifact store 和二进制 `.nib` 程序包仍未实现。
+
+### n 0.8-C Binary nIR Artifact Codec（2026-10-02）
+
+`n_ir_codec.py` 为统一 `n-ir/0.7` 增加确定性的 `.nir` 二进制 envelope：`NIR1` magic、
+版本、payload 长度、SHA-256 和 canonical JSON。编解码覆盖 semantic/planned/machine
+三个 phase，round-trip 保持 phase、模块 digest 和字节稳定；截断、尾随字节、未知版本、
+长度/摘要错误、重复 key、旧 schema、非 canonical JSON 和超大 payload 都 fail closed。
+
+该 codec 只保证 artifact 完整性与跨进程可恢复，不提供签名、schema migration、通用
+artifact store 或跨硬件性能结论。
 
 ## n 原生编译纵切 0.50（2026-10-01）
 

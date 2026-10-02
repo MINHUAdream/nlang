@@ -37,6 +37,17 @@ python n_run.py examples/goal_synthesis.n --synthesize add_one_plan \
 
 这是同一主机、同一 workload 和同一测量协议下的证据回放，不是跨硬件性能保证。
 
+## 0.8-C nIR 二进制 artifact codec
+
+`n_ir_codec.py` 为统一 `n-ir/0.7` 提供 `.nir` 编解码。固定 envelope 为：
+`NIR1` magic、format version、payload 长度、payload SHA-256 和 canonical nIR JSON。
+解码会拒绝截断、尾随字节、未知版本、长度不符、摘要不符、重复 JSON key、非 canonical
+JSON、旧 schema 和超过 64 MiB 的 payload。编解码不新增 IR phase，也不改变现有
+semantic/planned/machine digest 或 lowering。
+
+当前 API：`encode_nir`、`decode_nir`、`write_nir`、`read_nir`。这是跨进程 artifact
+完整性与缓存的基础，不等同于签名、schema migration 或一般 artifact store。
+
 测量回执包含真实 p50/p99，因此同一源码在不同运行中可能产生不同的
 `selection_receipt_digest`、planned/machine snapshot digest；这是证据版本变化，不是
 代码不稳定。只要选中的候选和契约不变，n-owned machine `code_digest` 与字节码保持
@@ -68,6 +79,7 @@ hardware/benchmark/result 摘要以及 p50/p99、验证成本、搜索次数、�
 | --- | --- |
 | `n_goal.py` | 候选规格、规范回执序列化与 fail-closed 选择 |
 | `n_measure.py` | 候选测量和 RTM workload receipt |
+| `n_ir_codec.py` | n-ir/0.7 semantic/planned/machine 二进制 artifact 编解码 |
 | `n_compile.py` | measured goal 到 planned/machine nIR 的编译入口 |
 | `n_machine_encoder_x64.py` | n-owned x86-64/SSE2 指令编码 |
 | `n_codegen_x64.py` | machine nIR 验证后代码生成 |

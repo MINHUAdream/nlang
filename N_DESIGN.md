@@ -2665,3 +2665,14 @@ codegen 仍只接受通过 machine verifier 的 snapshot。SIMD 不可用时自�
 CLI 的 `--selection-receipt-out` 保存规范回执，`--selection-receipt-in` 读取并回放。该
 能力只证明相同声明域内的可重现选择，不提供签名、跨硬件性能证明或一般 artifact store；
 这些仍保持 `open`。
+
+### 22.2 n 0.8-C `.nir` 二进制 artifact
+
+统一 `n-ir/0.7` 的三个 phase 共享同一个确定性 artifact envelope：`NIR1` magic、format
+version、payload length、payload SHA-256 与 canonical JSON payload。`encode_nir`/`decode_nir`
+以及文件读写助手只负责编码完整性和 nIR round-trip，不创造新的 IR 层或运行时效果。
+
+解码顺序固定为：检查 header 和完整长度，校验 payload 摘要，拒绝重复 JSON key，解析并
+要求 `n-ir/0.7`，再比较 payload 与模块的 canonical JSON。截断、尾随字节、未知版本、
+长度/摘要不符、旧 schema、非 canonical JSON 和超过 64 MiB 的 payload 都拒绝。签名、
+schema migration、artifact store 和跨设备 provenance 仍属于后续能力。
