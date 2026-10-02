@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 import platform
@@ -10,6 +10,7 @@ import time
 from typing import Any, Mapping, Sequence
 
 from n_front import parse
+from n_goal import CandidateMeasurement, CandidateSpec
 from n_ir import lower
 from n_ir_verify import verify_phase
 from n_rtm import Runtime
@@ -28,6 +29,24 @@ def _file_digest(names: Sequence[str]) -> str:
     return _digest(sources)
 
 
+def _hardware_digest() -> str:
+    from n_fabric import probe_fabric
+
+    return _digest(
+        {
+            "platform": platform.uname()._asdict(),
+            "fabric": {
+                name: {
+                    "status": capability.status,
+                    "features": sorted(capability.features),
+                    "detail": capability.detail,
+                }
+                for name, capability in probe_fabric().items()
+            },
+        }
+    )
+
+
 def _percentile(values: Sequence[float], percentile: float) -> float | None:
     if not values:
         return None
@@ -39,6 +58,72 @@ def _percentile(values: Sequence[float], percentile: float) -> float | None:
     upper = min(lower + 1, len(ordered) - 1)
     fraction = position - lower
     return ordered[lower] + (ordered[upper] - ordered[lower]) * fraction
+
+
+def measure_candidates(
+    source: str,
+    initial: Mapping[str, Sequence[float]],
+    candidates: Sequence[CandidateSpec],
+    *,
+    samples: int = 5,
+    warmup_samples: int = 1,
+) -> tuple[CandidateMeasurement, ...]:
+    """Measure declared candidates against one immutable workload binding."""
+
+    if samples < 1:
+        raise ValueError("samples must be positive")
+    if warmup_samples < 0:
+        raise ValueError("warmup_samples cannot be negative")
+    source_digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    workload_digest = _digest(
+        {name: list(values) for name, values in sorted(initial.items())}
+    )
+    benchmark_digest = _digest(
+        {
+            "samples": samples,
+            "warmup_samples": warmup_samples,
+            "measured_region": "rtm.run:prepare+execute+echo+commit",
+            "selection_policy": "adaptive-fastest",
+        }
+    )
+    hardware_digest = _hardware_digest()
+    semantic = lower(parse(source))
+    results: list[CandidateMeasurement] = []
+    for candidate in candidates:
+        if candidate.name not in {"reference_exact", "cpu_simd_sse2"}:
+            measurement = CandidateMeasurement(
+                candidate.name,
+                "unavailable",
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                "no executor registered for candidate backend",
+            )
+        else:
+            from n_compile import _measure_candidate
+
+            measurement = _measure_candidate(
+                source,
+                semantic,
+                candidate.name,
+                target="x86_64-windows",
+                initial=initial,
+                samples=samples,
+                warmup_samples=warmup_samples,
+            )
+        results.append(
+            replace(
+                measurement,
+                source_digest=source_digest,
+                workload_digest=workload_digest,
+                benchmark_digest=benchmark_digest,
+                hardware_digest=hardware_digest,
+            )
+        )
+    return tuple(results)
 
 
 @dataclass(frozen=True)
@@ -80,6 +165,9 @@ class RTMReceipt:
     serialization_cost_ms: float
     phase_verify_cost_ms: float
     detail: str | None = None
+    candidate_set_digest: str | None = None
+    selected_candidate: str | None = None
+    selection_receipt_digest: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -100,7 +188,16 @@ def measure(
     source_digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
     compile_started = time.perf_counter_ns()
     compiler = getattr(backend, "compile_source", None)
-    compilation = compiler(source) if callable(compiler) else None
+    compilation = (
+        compiler(
+            source,
+            initial=initial,
+            samples=samples,
+            warmup_samples=warmup_samples,
+        )
+        if callable(compiler)
+        else None
+    )
     nir = compilation.nir if compilation is not None else lower(parse(source))
     if compilation is not None:
         semantic_digest = compilation.semantic.digest
@@ -135,30 +232,36 @@ def measure(
     plan_digest = compilation.manifest.digest if compilation is not None else None
     lir_digest = compilation.lir.digest if compilation is not None else None
     code_digest = compilation.code_digest if compilation is not None else None
-    workload_digest = _digest({name: list(values) for name, values in sorted(initial.items())})
-    from n_fabric import probe_fabric
-
-    hardware_digest = _digest(
-        {
-            "platform": platform.uname()._asdict(),
-            "fabric": {
-                name: {
-                    "status": capability.status,
-                    "features": sorted(capability.features),
-                    "detail": capability.detail,
-                }
-                for name, capability in probe_fabric().items()
-            },
-        }
+    candidate_set_digest = (
+        compilation.manifest.candidate_set_digest if compilation is not None else None
     )
+    selected_candidate = (
+        compilation.manifest.selected_candidate if compilation is not None else None
+    )
+    selection_receipt_digest = (
+        compilation.manifest.selection_receipt_digest if compilation is not None else None
+    )
+    workload_digest = _digest({name: list(values) for name, values in sorted(initial.items())})
+    hardware_digest = _hardware_digest()
     compiler_digest = _file_digest(
-        ("n_front.py", "n_ir.py", "n_ir_verify.py", "n_goal.py", "n_plan.py", "n_lir.py", "n_codegen_x64.py", "n_compile.py")
+        (
+            "n_front.py",
+            "n_ir.py",
+            "n_ir_verify.py",
+            "n_goal.py",
+            "n_plan.py",
+            "n_lir.py",
+            "n_codegen_x64.py",
+            "n_machine_encoder_x64.py",
+            "n_compile.py",
+        )
     )
     runtime_digest = _file_digest(("n_rtm.py",))
     backend_files = {
         "n-native-x64-sse2-f64": ("n_native.py", "n_backend_types.py"),
         "cpu-simd-sse2-f64": ("n_backend_simd.py", "n_backend_types.py"),
         "tl-native": ("n_backend_tl.py", "n_backend_types.py"),
+        "reference": ("n_backend_tl.py", "n_backend_types.py"),
     }.get(getattr(backend, "name", ""), ("n_backend_tl.py",))
     backend_digest = _file_digest(backend_files)
     benchmark_digest = _digest(
@@ -172,27 +275,44 @@ def measure(
             "percentile_method": "linear_interpolation",
         }
     )
+    from n_backend_tl import ReferenceBackend
+
+    execution_backend = (
+        ReferenceBackend()
+        if selected_candidate == "reference_exact"
+        else backend
+    )
+    receipt_backend_name = getattr(execution_backend, "name", type(execution_backend).__name__)
     init_started = time.perf_counter_ns()
-    capability = backend.probe()
-    if capability.status == "available" and compilation is not None:
-        backend.initialize(compilation)
+    capability = execution_backend.probe()
+    if (
+        capability.status == "available"
+        and compilation is not None
+        and hasattr(execution_backend, "initialize")
+    ):
+        execution_backend.initialize(compilation)
     backend_init_ms = (time.perf_counter_ns() - init_started) / 1_000_000.0
 
-    search_count = 0
-    for node in nir.nodes:
-        if node.get("kind") == "synthesize":
-            from n_goal import synthesize
+    search_count = (
+        compilation.selection_receipt.search_count
+        if compilation is not None and compilation.selection_receipt is not None
+        else 0
+    )
+    if compilation is None or compilation.selection_receipt is None:
+        for node in nir.nodes:
+            if node.get("kind") == "synthesize":
+                from n_goal import synthesize
 
-            decision = synthesize(
-                nir,
-                str(node["goal"]),
-                available_features=capability.features,
-            )
-            search_count += decision.search_count
-            if decision.status != "selected":
-                return RTMReceipt(
-                    status=f"planning_{decision.status}",
-                    backend=getattr(backend, "name", type(backend).__name__),
+                decision = synthesize(
+                    nir,
+                    str(node["goal"]),
+                    available_features=capability.features,
+                )
+                search_count += decision.search_count
+                if decision.status != "selected":
+                    return RTMReceipt(
+                        status=f"planning_{decision.status}",
+                        backend=receipt_backend_name,
                     source_digest=source_digest,
                     nir_digest=nir.digest,
                     workload_digest=workload_digest,
@@ -227,12 +347,15 @@ def measure(
                     rewrite_count=rewrite_count,
                     serialization_cost_ms=serialization_cost_ms,
                     phase_verify_cost_ms=phase_verify_cost_ms,
-                    detail=decision.detail,
-                )
+                        detail=decision.detail,
+                        candidate_set_digest=candidate_set_digest,
+                        selected_candidate=selected_candidate,
+                        selection_receipt_digest=selection_receipt_digest,
+                    )
     if capability.status != "available":
         return RTMReceipt(
             status="unavailable",
-            backend=getattr(backend, "name", type(backend).__name__),
+            backend=receipt_backend_name,
             source_digest=source_digest,
             nir_digest=nir.digest,
             workload_digest=workload_digest,
@@ -268,6 +391,9 @@ def measure(
             serialization_cost_ms=serialization_cost_ms,
             phase_verify_cost_ms=phase_verify_cost_ms,
             detail=capability.detail,
+            candidate_set_digest=candidate_set_digest,
+            selected_candidate=selected_candidate,
+            selection_receipt_digest=selection_receipt_digest,
         )
     elapsed: list[float] = []
     verification_calls = 0
@@ -277,7 +403,7 @@ def measure(
     final_status = "committed"
     sample_results: list[dict[str, Any]] = []
     for sample_index in range(warmup_samples + samples):
-        runtime = Runtime(backend)
+        runtime = Runtime(execution_backend)
         runtime.load(nir, initial)
         start = time.perf_counter_ns()
         receipt = runtime.run()
@@ -303,7 +429,7 @@ def measure(
     quality_loss = 0.0 if final_status == "committed" else None
     return RTMReceipt(
         status=final_status,
-        backend=getattr(backend, "name", type(backend).__name__),
+        backend=receipt_backend_name,
         source_digest=source_digest,
         nir_digest=nir.digest,
         workload_digest=workload_digest,
@@ -342,7 +468,10 @@ def measure(
         rewrite_count=rewrite_count,
         serialization_cost_ms=serialization_cost_ms,
         phase_verify_cost_ms=phase_verify_cost_ms,
+        candidate_set_digest=candidate_set_digest,
+        selected_candidate=selected_candidate,
+        selection_receipt_digest=selection_receipt_digest,
     )
 
 
-__all__ = ["RTMReceipt", "measure"]
+__all__ = ["RTMReceipt", "measure", "measure_candidates"]

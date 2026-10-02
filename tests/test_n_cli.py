@@ -41,6 +41,28 @@ class NCLITests(unittest.TestCase):
         else:
             self.assertEqual(code, 2)
 
+    def test_goal_synthesize_cli_reports_measured_selection(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = n.main(
+                [
+                    "examples/goal_synthesis.n",
+                    "--synthesize",
+                    "add_one_plan",
+                    "--samples",
+                    "1",
+                    "--warmup-samples",
+                    "0",
+                    "--json",
+                ]
+            )
+        payload = json.loads(output.getvalue())
+        self.assertEqual(code, 0)
+        self.assertEqual(payload["status"], "selected")
+        self.assertIn(payload["selected"], {"reference_exact", "cpu_simd_sse2"})
+        self.assertEqual(len(payload["selection_receipt_digest"]), 64)
+        self.assertEqual(len(payload["measurements"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

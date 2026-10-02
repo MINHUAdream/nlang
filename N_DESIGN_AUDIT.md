@@ -296,6 +296,21 @@ NPU/CXL 不会伪造可用执行器。当前仍未实现 GPU tile、NPU SRAM 和
 性能收益；0.50 仍保留为兼容/回滚证据。旧 tl v0.7 与原路线中的 n-0.7 保留为历史
 编号，避免修改既有验证记录。
 
+## n 0.8-A measured goal 审计（2026-10-02）
+
+| 检查项 | 当前证据 | 尚未关闭的实现风险 |
+| --- | --- | --- |
+| 候选集合 | `reference_exact` 与 `cpu_simd_sse2` 的真实候选测量 | 非 CPU 候选仍无 executor |
+| 测量绑定 | source/workload/benchmark/hardware digest 全部进入每个 `CandidateMeasurement` | 尚无跨进程签名、置信区间、能耗/频率采样 |
+| 选择门 | exact Echo/Commit、零质量损失、已知 p50、绑定一致性 | 只有 add-scalar 窄域，尚无误差预算/近似值 |
+| 回退 | SIMD 不可用时选择 exact reference；Echo/摘要/epoch 失败不提交 | 多计划热切换、旧计划保活和崩溃隔离仍未实现 |
+| 原生后端 | n-owned x64 encoder，0.7 machine-code digest 保持兼容 | 无通用寄存器分配、目标文件/链接器和第二目标 |
+
+本轮只关闭 Windows x86-64/SSE2 contiguous CPU `f64 add_scalar` 的 measured-goal
+纵切；不能据此声称 n 普遍超过 C/Fortran。GPU tile、NPU SRAM、CXL memory 和
+更宽泛的目标搜索继续保持 `open`。状态为
+`implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`。
+
 ## 风险闭环与可证明边界
 
 以下编号对应上面 60 项风险，按主要关闭证据分类；类别不是风险严重度。RuntimeRoot 不变量会横切若干实现项，因此另列覆盖项，不重复计数。

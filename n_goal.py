@@ -54,6 +54,10 @@ class CandidateMeasurement:
     fallback_rate: float | None
     commit_count: int | None
     detail: str | None = None
+    source_digest: str | None = None
+    workload_digest: str | None = None
+    benchmark_digest: str | None = None
+    hardware_digest: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -66,6 +70,10 @@ class CandidateMeasurement:
             "fallback_rate": self.fallback_rate,
             "commit_count": self.commit_count,
             "detail": self.detail,
+            "source_digest": self.source_digest,
+            "workload_digest": self.workload_digest,
+            "benchmark_digest": self.benchmark_digest,
+            "hardware_digest": self.hardware_digest,
         }
 
 
@@ -142,13 +150,44 @@ def select_measured(
     policy: str = "adaptive-fastest",
 ) -> SelectionReceipt:
     candidate_names = {candidate.name for candidate in candidates}
-    usable = [
+    committed = [
         measurement
         for measurement in measurements
+        if measurement.candidate in candidate_names and measurement.status == "committed"
+    ]
+    binding_fields = ("source_digest", "workload_digest", "benchmark_digest", "hardware_digest")
+    if any(
+        any(getattr(measurement, field) is None for field in binding_fields)
+        for measurement in committed
+    ):
+        return SelectionReceipt(
+            goal_name,
+            policy,
+            candidate_set_digest(candidates),
+            None,
+            len(candidates),
+            tuple(measurements),
+            "candidate measurements are missing a workload binding",
+        )
+    bindings = {
+        tuple(getattr(measurement, field) for field in binding_fields)
+        for measurement in committed
+    }
+    if len(bindings) > 1:
+        return SelectionReceipt(
+            goal_name,
+            policy,
+            candidate_set_digest(candidates),
+            None,
+            len(candidates),
+            tuple(measurements),
+            "candidate measurements have mismatched workload binding",
+        )
+    usable = [
+        measurement
+        for measurement in committed
         if (
-            measurement.candidate in candidate_names
-            and measurement.status == "committed"
-            and measurement.quality_loss is not None
+            measurement.quality_loss is not None
             and measurement.quality_loss <= 0.0
             and measurement.p50_ms is not None
         )

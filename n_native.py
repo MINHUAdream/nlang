@@ -12,7 +12,7 @@ from n_backend_types import Capability
 from n_codegen_x64 import code_digest, lower_machine_code
 from n_compile import Compilation
 from n_lir import legacy_lir_view
-from n_plan import PlanError, verify_manifest
+from n_plan import PlanError, verify_manifest, verify_selection_receipt
 
 
 class ExecutableKernel:
@@ -83,6 +83,17 @@ class NativeBackend:
 
     def initialize(self, compilation: Compilation) -> None:
         verify_manifest(compilation.manifest, compilation.source, compilation.nir)
+        if compilation.selection_receipt is not None:
+            from n_measure import _hardware_digest
+
+            verify_selection_receipt(
+                compilation.manifest,
+                compilation.semantic,
+                compilation.selection_receipt,
+                hardware_digest=_hardware_digest(),
+            )
+        elif compilation.manifest.selection_receipt_digest not in {"", "0" * 64}:
+            raise PlanError("goal compilation is missing its selection receipt")
         if compilation.manifest.planned_digest != compilation.planned.digest:
             raise PlanError("planned digest does not match compilation")
         if compilation.machine.parent_digest != compilation.planned.digest:

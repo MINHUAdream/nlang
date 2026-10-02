@@ -9,7 +9,13 @@ import math
 from typing import Any, Mapping
 
 from n_front import parse
-from n_goal import CandidateSpec, candidate_set_digest, candidate_specs
+from n_goal import (
+    CandidateSpec,
+    SelectionReceipt,
+    candidate_set_digest,
+    candidate_specs,
+    select_measured,
+)
 from n_ir import IRPhase, IRValidationError, NIRModule, RewriteDelta, lower
 from n_ir_verify import verify_phase
 
@@ -329,4 +335,51 @@ def verify_manifest(manifest: PlanManifest, source: str, nir: NIRModule) -> None
         raise PlanError("plan manifest fields do not match source and NIR")
 
 
-__all__ = ["PlanError", "PlanManifest", "plan_module", "verify_manifest"]
+def verify_selection_receipt(
+    manifest: PlanManifest,
+    semantic: NIRModule,
+    receipt: SelectionReceipt,
+    *,
+    hardware_digest: str | None = None,
+) -> None:
+    """Verify measured goal evidence before a selected plan can execute."""
+
+    goals = _of_kind(semantic, "goal")
+    syntheses = _of_kind(semantic, "synthesize")
+    if len(goals) != 1 or len(syntheses) != 1:
+        raise PlanError("selection receipt requires exactly one goal and synthesize operation")
+    goal_name = str(syntheses[0].get("goal"))
+    candidates = candidate_specs(semantic, goal_name)
+    if receipt.goal != goal_name:
+        raise PlanError("selection receipt goal does not match semantic NIR")
+    if receipt.candidate_set_digest != manifest.candidate_set_digest:
+        raise PlanError("selection receipt candidate set does not match manifest")
+    if receipt.selected_candidate != manifest.selected_candidate:
+        raise PlanError("selection receipt candidate does not match manifest")
+    if receipt.digest != manifest.selection_receipt_digest:
+        raise PlanError("selection receipt digest does not match manifest")
+    replayed = select_measured(
+        goal_name,
+        candidates,
+        receipt.measurements,
+        policy=receipt.policy,
+    )
+    if replayed.digest != receipt.digest or replayed.selected_candidate != receipt.selected_candidate:
+        raise PlanError("selection receipt cannot be replayed from its measurements")
+    if hardware_digest is not None:
+        measured_hardware = {
+            item.hardware_digest
+            for item in receipt.measurements
+            if item.status == "committed"
+        }
+        if measured_hardware != {hardware_digest}:
+            raise PlanError("selection receipt hardware digest does not match host")
+
+
+__all__ = [
+    "PlanError",
+    "PlanManifest",
+    "plan_module",
+    "verify_manifest",
+    "verify_selection_receipt",
+]

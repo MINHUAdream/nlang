@@ -9,8 +9,8 @@ import sys
 
 from n_backend_tl import ReferenceBackend, TLNativeBackend
 from n_backend_simd import CPUSIMDBackend
+from n_compile import compile_source
 from n_front import parse
-from n_goal import synthesize
 from n_ir import lower
 from n_measure import measure
 from n_native import NativeBackend
@@ -44,8 +44,36 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     source = args.source.read_text(encoding="utf-8")
     if args.synthesize:
-        decision = synthesize(lower(parse(source)), args.synthesize, available_features={"cpu"})
-        print(json.dumps(decision.__dict__, sort_keys=True, ensure_ascii=False))
+        compilation = compile_source(
+            source,
+            initial=_default_initial(source),
+            samples=args.samples,
+            warmup_samples=args.warmup_samples,
+        )
+        decision = compilation.goal_decision
+        receipt = compilation.selection_receipt
+        if decision is None or receipt is None or decision.goal != args.synthesize:
+            print(
+                json.dumps(
+                    {
+                        "status": "unavailable",
+                        "detail": f"goal {args.synthesize!r} was not measured",
+                    },
+                    sort_keys=True,
+                    ensure_ascii=False,
+                )
+            )
+            return 2
+        payload = dict(decision.__dict__)
+        payload.update(
+            {
+                "candidate_set_digest": receipt.candidate_set_digest,
+                "selection_receipt_digest": receipt.digest,
+                "measurements": [item.to_dict() for item in receipt.measurements],
+                "policy": receipt.policy,
+            }
+        )
+        print(json.dumps(payload, sort_keys=True, ensure_ascii=False))
         return 0 if decision.selected is not None else 2
     backend = {
         "reference": ReferenceBackend,

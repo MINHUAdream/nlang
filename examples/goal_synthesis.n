@@ -1,11 +1,22 @@
-module planning;
+module measured_goal;
 
-goal add_one {
+field x: f64[4] layout contiguous device cpu;
+wave add_one(x) -> delta {
+    read x;
+    write x;
+    delta add_scalar 1.0;
+    echo exact;
+    fallback reject;
+}
+
+commit add_one into x;
+
+goal add_one_plan {
     target minimize cost;
     target maximize quality;
     require [cpu];
-    option reference { cost: 1.0; quality: 1.0; };
-    option native { cost: 0.5; quality: 0.99; };
+    option reference_exact { cost: 1.0; quality: 1.0; };
+    option cpu_simd_sse2 { cost: 0.5; quality: 1.0; };
 }
 
-synthesize add_one;
+synthesize add_one_plan;

@@ -221,17 +221,16 @@ def _measure_goal_selection(
     goal_name = str(syntheses[0]["goal"])
     candidates = candidate_specs(semantic, goal_name)
     workload = _goal_initial(semantic, initial)
-    measurements = tuple(
-        _measure_candidate(
-            source,
-            semantic,
-            candidate.name,
-            target=target,
-            initial=workload,
-            samples=samples,
-            warmup_samples=warmup_samples,
-        )
-        for candidate in candidates
+    if target != "x86_64-windows":
+        raise PlanError(f"unsupported native target {target!r}")
+    from n_measure import measure_candidates
+
+    measurements = measure_candidates(
+        source,
+        workload,
+        candidates,
+        samples=samples,
+        warmup_samples=warmup_samples,
     )
     selection = select_measured(goal_name, candidates, measurements)
     if selection.selected_candidate is None:

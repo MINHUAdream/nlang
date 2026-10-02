@@ -2,7 +2,7 @@ import unittest
 from dataclasses import replace
 
 from n_compile import compile_source
-from n_plan import PlanError
+from n_plan import PlanError, verify_selection_receipt
 from n_lir import lower_machine
 
 
@@ -37,11 +37,41 @@ class GoalSelectionCompilerTests(unittest.TestCase):
         self.assertEqual(len(result.manifest.candidate_set_digest), 64)
         self.assertEqual(len(result.manifest.selection_receipt_digest), 64)
 
+    def test_goal_selection_receipt_binds_every_candidate_measurement(self):
+        result = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
+        self.assertIsNotNone(result.selection_receipt)
+        for measurement in result.selection_receipt.measurements:
+            self.assertEqual(len(measurement.source_digest or ""), 64)
+            self.assertEqual(len(measurement.workload_digest or ""), 64)
+            self.assertEqual(len(measurement.benchmark_digest or ""), 64)
+            self.assertEqual(len(measurement.hardware_digest or ""), 64)
+
+    def test_measurement_receipt_does_not_change_emitted_machine_bytes(self):
+        first = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
+        second = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
+        self.assertEqual(first.code_digest, second.code_digest)
+        self.assertEqual(first.code, second.code)
+
     def test_goal_source_rejects_stale_candidate_selection(self):
         result = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
         altered = replace(result.manifest, selected_candidate="forged")
         with self.assertRaisesRegex(PlanError, "candidate"):
             lower_machine(result.planned, altered)
+
+    def test_native_rejects_mutated_selection_receipt(self):
+        result = compile_source(GOAL_SOURCE, initial={"x": [1.0, 2.0, 3.0, 4.0]})
+        forged_receipt = replace(
+            result.selection_receipt,
+            measurements=(
+                replace(
+                    result.selection_receipt.measurements[0],
+                    hardware_digest="0" * 64,
+                ),
+                *result.selection_receipt.measurements[1:],
+            ),
+        )
+        with self.assertRaisesRegex(PlanError, "receipt"):
+            verify_selection_receipt(result.manifest, result.semantic, forged_receipt)
 
 
 if __name__ == "__main__":

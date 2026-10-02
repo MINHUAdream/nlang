@@ -406,12 +406,46 @@ n 普遍超过 C/Fortran 的结论。旧 `run_v13.py` 当前仍暴露 v0.12 历�
 `synthesize` 通过 `n_goal.py` 做确定性选择；例如：
 
 ```text
-python n_run.py examples/goal_synthesis.n --synthesize add_one --json
+python n_run.py examples/goal_synthesis.n --synthesize add_one_plan --json
 ```
 
 `n_fabric.py` 提供 CPU/GPU/NPU/CXL 的显式 capability probe。probe 只说明运行时
 或设备是否可发现，不能替代具体 workload executor；当前缺少的 NPU/CXL 会保留为
 `unavailable`，不会写成零成本或零回退。
+
+## n 0.8-A Measured Goal + CPU SIMD（2026-10-02）
+
+0.8-A 把 `goal/synthesize` 从声明指标排序推进为 workload-bound measured selection：
+
+```text
+.n -> semantic nIR -> measured candidate set -> planned nIR -> machine nIR -> x86-64 bytes
+```
+
+当前候选集合固定为 `reference_exact` 与 `cpu_simd_sse2`。每个候选都在同一 source、
+workload、benchmark protocol 和 hardware digest 下测量；只有 RTM exact Echo/Commit
+成功、quality loss 为零且 p50 已知的结果才可晋升。p50/p99、验证成本、搜索次数、
+回退率和 selection receipt digest 都保留在回执中。任何缺失或不一致的绑定都会 fail
+closed，未知延迟不会被写成 0。
+
+在 SIMD 不可用时，选择器只能选择 `reference_exact`；reference executor 是安全的
+可执行回退，不是对 SIMD 成本的模拟。Echo 失败、stale epoch、伪造 receipt 或计划
+摘要不一致均不得提交状态。
+
+本轮将 x64 SSE2 emitter 收敛为 n-owned `n_machine_encoder_x64.py`，历史 0.7 add-scalar
+机器码摘要保持兼容。真实范围仍是 Windows x86-64/SSE2、contiguous CPU `f64`
+`add_scalar` 单 field/wave/commit。GPU tile、NPU SRAM、CXL memory executor、通用
+SSA/CFG、寄存器分配、自举和广泛性能优越性均保持 open；必须在对应硬件与绑定
+workload 上取得新鲜回执后才能扩大结论。
+
+可运行验证：
+
+```text
+python n_run.py examples/goal_synthesis.n --backend n-native --samples 3 --warmup-samples 1 --json
+python n_run.py examples/goal_synthesis.n --synthesize add_one_plan --json
+python -m unittest discover -s tests -p "test_n_*.py" -v
+```
+
+状态标签：`implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`。
 
 ## n 原生编译纵切 0.50（2026-10-01）
 

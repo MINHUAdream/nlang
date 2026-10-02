@@ -2633,3 +2633,22 @@ profile、schedule、verifier、fallback、benchmark 和 objective epoch 摘要�
 版本说明：旧 tl v0.7 和此前路线表中的 n-0.7 仍是历史标识；本架构用全名
 **n 0.7 Unified Phased IR**，旧 n-0.7 的 MemoryStore/多螺旋内容后移到 Agent/RTST
 里程碑，不作为机器 IR phase。
+
+## 22. n 0.8-A measured goal 与 CPU SIMD
+
+0.8-A 将 `goal/synthesize` 接入实际候选测量，但只承诺已实现的窄执行域。候选集合
+固定为 `reference_exact`、`cpu_simd_sse2`；选择必须由同一 source、workload、
+benchmark protocol、hardware digest 绑定的 `SelectionReceipt` 驱动。测量结果只有
+在 exact Echo/Commit 成功、quality loss 为零且延迟已知时才可选择；缺失或不一致的
+绑定直接返回无选择，不能把未知成本解释为零。
+
+选择结果写入 planned nIR 的 `candidate_set`/`selection` operation，并由
+`PlanManifest` 的 candidate-set、selected-candidate、receipt digest 交叉验证。机器
+codegen 仍只接受通过 machine verifier 的 snapshot。SIMD 不可用时自动选择
+`reference_exact`，不是伪造 SIMD 测量；Echo、epoch、摘要或能力不匹配时保持旧状态，
+不提交。
+
+已实现范围：Windows x86-64/SSE2，contiguous CPU `f64`，单 field/wave/commit 的
+`add_scalar`。GPU tile、NPU SRAM、CXL executor、通用 SSA/CFG、完整寄存器分配、
+自举和跨 workload 性能结论仍为 `open`，必须由目标硬件上的新鲜回执关闭。状态标签：
+`implemented_in_native_slice / measured_goal_cpu_simd / generalization_open`。
