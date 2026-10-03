@@ -482,14 +482,40 @@ python n_run.py examples/rtm_add_one.n --emit-nir out/machine.nir --emit-phase m
 artifact。JSON 回执报告 `phase`、`nir_digest` 和 `bytes`，不把 artifact 完整性误报为
 签名、性能或跨硬件真实性证明。
 
+## n 0.9 Native Scalar Kernel Family（2026-10-03）
+
+0.9 将原生 CPU 算子从单一 `add_scalar` 扩展为三种共享注册表驱动的 scalar
+transition：`add_scalar`、`sub_scalar`、`mul_scalar`。操作名由 parser 进入 semantic
+nIR，并继续绑定到 measured candidate、`PlanManifest`、planned/machine nIR、只读
+LIR 投影、n-owned x64 emitter 与 RTM Echo/Commit；未知操作在前端和计划验证阶段
+fail-closed。
+
+Windows x86-64/SSE2 的 packed-f64 emitter 分别生成 `addpd`、`subpd` 和 `mulpd`。
+`CPUSIMDBackend` 按操作缓存独立的可执行 kernel；旧的
+`encode_add_scalar_f64x2()` 保留为兼容入口。非 Windows x86-64 主机不会把不可用
+后端标记为 native。
+
+这一轮只扩大可验证的 kernel family，不扩大性能范围：仍是 contiguous CPU `f64`
+单 field/wave/commit。GPU tile、NPU SRAM、CXL memory executor、通用 SSA/CFG、完整
+寄存器分配、自举以及普遍超过 C/Fortran 的结论都需要各自的真实 workload、硬件和
+新鲜 measurement receipt。
+
+验证命令：
+
+```text
+python -m unittest tests.test_n09_kernel_family tests.test_n_simd -v
+python -m unittest discover -s tests -p "test_n_*.py" -v
+```
+
 ## n 原生编译纵切 0.50（2026-10-01）
 
 架构主线已收敛为 n：`.n -> n_front -> NIR -> PlanManifest -> n-LIR -> n-owned x86-64
 lowering -> executable -> RTM Echo/Commit -> receipt`。旧 tl parser、AST、VM、
 固定内核分派和 C DLL 不参与 `.n` 的新原生路径；旧 `.tl`、自举材料和回归仍保留。
 
-当前真实原生范围严格限于 Windows x86-64/SSE2、contiguous CPU `f64`
-`add_scalar` 单 field/wave/commit。可运行：
+当前 0.50 纵切历史范围严格限于 Windows x86-64/SSE2、contiguous CPU `f64`
+`add_scalar` 单 field/wave/commit；n 0.9 在同一契约上扩展了 `sub_scalar` 与
+`mul_scalar`。可运行：
 
 ```text
 python n_run.py examples/rtm_add_one.n --backend n-native --samples 5 --warmup-samples 1 --json

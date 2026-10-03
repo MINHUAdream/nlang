@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from n_ir import IRPhase, IRValidationError, NIRModule
+from n_ops import machine_operation_kind
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,7 @@ _LEGAL_KINDS = {
             "machine.kernel",
             "machine.buffer",
             "machine.loop",
-            "machine.add_scalar",
+            *(machine_operation_kind(operation) for operation in ("add_scalar", "sub_scalar", "mul_scalar")),
             "machine.effect",
             "machine.move",
             "machine.return",

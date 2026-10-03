@@ -1,6 +1,6 @@
-# n 0.8 Package
+# n 0.8 Package + n 0.9 Kernel Family
 
-状态：`implemented_in_native_slice / measured_goal_cpu_simd / replayable_selection / generalization_open`
+状态：`implemented_in_native_slice / measured_goal_cpu_simd / replayable_selection / scalar_kernel_family / generalization_open`
 
 本包把 n 的 measured goal 与 CPU SIMD 原生纵切收敛到现有 `tl-lang` 项目。旧 `.tl`
 自举材料和兼容回归保留；`.n` 路径的权威链为：
@@ -66,6 +66,27 @@ digest 和字节数；它是可恢复的编译中间产物，不是性能回执�
 `selection_receipt_digest`、planned/machine snapshot digest；这是证据版本变化，不是
 代码不稳定。只要选中的候选和契约不变，n-owned machine `code_digest` 与字节码保持
 确定性，已有回归测试明确验证这一点。
+
+## n 0.9 CPU Scalar Kernel Family
+
+n 0.9 将原生纵切从单一 `add_scalar` 扩展为共享注册表驱动的
+`add_scalar`、`sub_scalar`、`mul_scalar` 三种逐元素 `f64` 操作。操作名从 parser
+一路绑定到 semantic/planned/machine nIR、PlanManifest、只读 LIR 投影、SSE2 emitter
+和 RTM Echo/Commit；未知操作在前端或计划验证阶段 fail-closed。
+
+Windows x86-64 上的 n-owned SSE2 编码使用 packed-f64 `addpd/subpd/mulpd`，
+`CPUSIMDBackend` 为三种操作分别缓存可执行 kernel；非 Windows x86-64 主机仍报告
+`unavailable`，不会伪造 native 能力。旧 `encode_add_scalar_f64x2()` 保留为兼容包装。
+
+本增量扩大的是可验证算子族，不扩大性能结论：仍只覆盖 contiguous CPU `f64`
+单 field/wave/commit；GPU tile、NPU SRAM、CXL memory、通用 CFG/SSA、完整寄存器
+分配和普遍超过 C/Fortran 的主张仍未交付。
+
+验证：
+
+```text
+python -m unittest tests.test_n09_kernel_family tests.test_n_simd -v
+```
 
 ## 明确未交付
 

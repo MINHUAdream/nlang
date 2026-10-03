@@ -7,8 +7,9 @@ import math
 
 from n_ir import IRPhase, IRValidationError, NIRModule
 from n_ir_verify import verify_phase
-from n_machine_encoder_x64 import encode_add_scalar_f64x2
+from n_machine_encoder_x64 import encode_scalar_f64x2
 from n_lir import LIRKernel, legacy_lir_view, lower_to_lir
+from n_ops import validate_scalar_operation
 from n_plan import PlanError, PlanManifest
 
 
@@ -17,6 +18,10 @@ def lower_lir(lir: LIRKernel, manifest: PlanManifest) -> bytes:
         raise PlanError("unsupported native plan schema or backend")
     if manifest.target != "x86_64-windows":
         raise PlanError("target does not match native plan")
+    try:
+        operation = validate_scalar_operation(manifest.operation)
+    except ValueError as exc:
+        raise PlanError(str(exc)) from exc
     output_name = f"delta:{manifest.field}"
     if (
         lir.schema != "n-lir/1"
@@ -42,13 +47,14 @@ def lower_lir(lir: LIRKernel, manifest: PlanManifest) -> bytes:
         or manifest.dtype != "f64"
         or manifest.layout != "contiguous"
         or manifest.device != "cpu"
-        or manifest.operation != "add_scalar"
-        or manifest.required_features != ("cpu", "sse2", "sse2_packed_f64")
+        or operation != manifest.operation
+        or manifest.required_features
+        != ("cpu", "sse2", "sse2_packed_f64", manifest.operation)
         or manifest.fallback != "reference_exact_reject_on_mismatch"
     ):
         raise PlanError("native plan does not match typed n-LIR")
 
-    return encode_add_scalar_f64x2()
+    return encode_scalar_f64x2(manifest.operation)
 
 
 def lower_plan(nir: NIRModule, manifest: PlanManifest) -> bytes:

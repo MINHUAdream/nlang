@@ -18,6 +18,7 @@ from n_goal import (
 )
 from n_ir import IRPhase, IRValidationError, NIRModule, RewriteDelta, lower
 from n_ir_verify import verify_phase
+from n_ops import validate_scalar_operation
 
 
 class PlanError(ValueError):
@@ -203,15 +204,17 @@ def _create_manifest(
         "delta",
         "delta_value",
     ]:
-        raise PlanError("native slice requires read/write/add_scalar operations")
+        raise PlanError("native slice requires read/write/scalar operations")
     field_name = str(field["name"])
     if operations[0].get("value") != field_name or operations[1].get("value") != field_name:
         raise PlanError("wave read/write set does not match the field")
-    if operations[2].get("value") != "add_scalar":
-        raise PlanError("native slice supports only add_scalar")
+    try:
+        operation = validate_scalar_operation(str(operations[2].get("value")))
+    except ValueError as exc:
+        raise PlanError(str(exc)) from exc
     scalar = operations[3].get("value")
     if not isinstance(scalar, (int, float)) or not math.isfinite(float(scalar)):
-        raise PlanError("add_scalar value must be a finite number")
+        raise PlanError(f"{operation} value must be a finite number")
     candidate_by_name = {
         candidate.name: candidate for candidate in goal_candidates
     }
@@ -220,7 +223,8 @@ def _create_manifest(
             CandidateSpec(
                 "cpu_simd_sse2",
                 "n-native-x64-sse2-f64",
-                ("cpu", "sse2", "sse2_packed_f64"),
+                ("cpu", "sse2", "sse2_packed_f64", operation),
+                operation,
             ),
         )
         candidate_by_name = {candidate.name: candidate for candidate in goal_candidates}
@@ -242,7 +246,7 @@ def _create_manifest(
         layout="contiguous",
         device="cpu",
         wave=str(wave["name"]),
-        operation="add_scalar",
+        operation=operation,
         scalar=float(scalar),
         required_features=selected.required_features,
         fallback=(
@@ -299,7 +303,7 @@ def plan_module(nir: NIRModule, manifest: PlanManifest) -> NIRModule:
         )
     delta = RewriteDelta(
         parent_digest=nir.digest,
-        rule_id="plan.x86_64.sse2.add_scalar",
+        rule_id=f"plan.x86_64.sse2.{manifest.operation}",
         changed_node_ids=(plan_id,),
         verifier_digest=manifest.verifier_digest,
     )

@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import re
 from typing import Sequence
 
+from n_ops import SCALAR_OPERATIONS
+
 
 class NParseError(ValueError):
     """A source error with a byte/character offset."""
@@ -249,7 +251,7 @@ class _Parser:
                 self.take(";")
             elif self.maybe("delta"):
                 operation = self.ident()
-                if operation != "add_scalar":
+                if operation not in SCALAR_OPERATIONS:
                     raise NParseError(f"unknown wave delta operation {operation!r}")
                 value = float(self.take(kind="number").text)
                 operations.append(NWaveOp("delta", operation))
@@ -277,7 +279,9 @@ class _Parser:
             raise NParseError(f"wave {name!r} requires a fallback")
         kinds = [item.kind for item in operations]
         if kinds != ["read", "write", "delta", "delta_value"]:
-            raise NParseError("first RTM wave must contain read, write, and delta add_scalar in order")
+            raise NParseError(
+                "RTM wave must contain read, write, and a supported scalar delta in order"
+            )
         if operations[0].value != parameter or operations[1].value != parameter:
             raise NParseError(f"wave {name!r} must read and write its parameter")
         return NWaveDecl(name, parameter, result, tuple(operations), echo, fallback)

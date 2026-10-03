@@ -9,6 +9,7 @@ import threading
 from typing import Any, Mapping
 
 from n_backend_tl import Capability, _scalar
+from n_ops import SCALAR_OPERATIONS, validate_scalar_operation
 
 
 class _ExecutableKernel:
@@ -60,19 +61,19 @@ class _ExecutableKernel:
         self.close()
 
 
-def _build_add_f64x2() -> bytes:
-    from n_machine_encoder_x64 import encode_add_scalar_f64x2
+def _build_scalar_f64x2(operation: str) -> bytes:
+    from n_machine_encoder_x64 import encode_scalar_f64x2
 
-    return encode_add_scalar_f64x2()
+    return encode_scalar_f64x2(operation)
 
 
 class CPUSIMDBackend:
-    """Two-lane SSE2 float64 add with explicit zero-padded vector tail."""
+    """Two-lane SSE2 float64 scalar kernels with explicit zero-padded tails."""
 
     name = "cpu-simd-sse2-f64"
 
     def __init__(self):
-        self._kernel: _ExecutableKernel | None = None
+        self._kernels: dict[str, _ExecutableKernel] = {}
         self._lock = threading.Lock()
         self._detail: str | None = None
 
@@ -81,9 +82,15 @@ class CPUSIMDBackend:
             return Capability("unavailable", frozenset(), "backend requires Windows x86-64")
         try:
             with self._lock:
-                if self._kernel is None:
-                    self._kernel = _ExecutableKernel(_build_add_f64x2())
-            return Capability("available", frozenset({"cpu", "sse2", "sse2_packed_f64", "add_scalar"}))
+                for operation in SCALAR_OPERATIONS:
+                    if operation not in self._kernels:
+                        self._kernels[operation] = _ExecutableKernel(
+                            _build_scalar_f64x2(operation)
+                        )
+            return Capability(
+                "available",
+                frozenset({"cpu", "sse2", "sse2_packed_f64", *SCALAR_OPERATIONS}),
+            )
         except Exception as exc:
             self._detail = f"SSE2 executor initialization failed: {exc}"
             return Capability("unavailable", frozenset(), self._detail)
@@ -96,6 +103,20 @@ class CPUSIMDBackend:
             raise RuntimeError(capability.detail or "CPU SIMD backend unavailable")
         if field.dtype != "f64":
             raise TypeError("cpu-simd-sse2-f64 requires field dtype f64")
+        operations = list(wave.get("operations", ()))
+        delta_operations = [
+            item.get("value") for item in operations if item.get("kind") == "delta"
+        ]
+        if len(delta_operations) != 1:
+            raise ValueError("cpu-simd-sse2-f64 requires one scalar delta operation")
+        try:
+            operation = validate_scalar_operation(str(delta_operations[0]))
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        with self._lock:
+            kernel = self._kernels.get(operation)
+        if kernel is None:
+            raise RuntimeError(f"CPU SIMD kernel is unavailable for {operation}")
         values = [float(value) for value in field.values]
         count = len(values)
         padded_count = count + (count & 1)
@@ -105,7 +126,7 @@ class CPUSIMDBackend:
         input_buffer = (ctypes.c_double * storage_size)(*(padded + [0.0] * (storage_size - padded_count)))
         rhs_buffer = (ctypes.c_double * storage_size)(*(rhs + [0.0] * (storage_size - padded_count)))
         output_buffer = (ctypes.c_double * storage_size)()
-        self._kernel.function(
+        kernel.function(
             ctypes.addressof(input_buffer),
             ctypes.addressof(rhs_buffer),
             ctypes.addressof(output_buffer),

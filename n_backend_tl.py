@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from n_backend_types import Capability
+from n_ops import apply_scalar, validate_scalar_operation
 
 
 def _scalar(wave: Mapping[str, Any]) -> float:
@@ -28,13 +29,22 @@ class ReferenceBackend:
     name = "reference"
 
     def probe(self) -> Capability:
-        return Capability("available", frozenset({"reference", "add_scalar"}))
+        return Capability("available", frozenset({"reference", "add_scalar", "sub_scalar", "mul_scalar"}))
 
     def execute(self, wave: Mapping[str, Any], field: Any):
         from n_rtm import Delta, cast_value
 
+        operation = next(
+            item["value"]
+            for item in wave["operations"]
+            if item.get("kind") == "delta"
+        )
+        validate_scalar_operation(operation)
         scalar = _scalar(wave)
-        values = [cast_value(float(value) + scalar, field.dtype) for value in field.values]
+        values = [
+            cast_value(apply_scalar(operation, float(value), scalar), field.dtype)
+            for value in field.values
+        ]
         return Delta(field.name, field.epoch, values)
 
 

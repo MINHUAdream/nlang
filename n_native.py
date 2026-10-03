@@ -12,6 +12,7 @@ from n_backend_types import Capability
 from n_codegen_x64 import code_digest, lower_machine_code
 from n_compile import Compilation
 from n_lir import legacy_lir_view
+from n_ops import SCALAR_OPERATIONS
 from n_plan import PlanError, verify_manifest, verify_selection_receipt
 
 
@@ -79,7 +80,10 @@ class NativeBackend:
             return Capability("unavailable", frozenset(), "backend requires Windows x86-64")
         if not hasattr(ctypes, "WinDLL"):
             return Capability("unavailable", frozenset(), "Windows executable-memory API is unavailable")
-        return Capability("available", frozenset({"cpu", "sse2", "sse2_packed_f64", "add_scalar"}))
+        return Capability(
+            "available",
+            frozenset({"cpu", "sse2", "sse2_packed_f64", *SCALAR_OPERATIONS}),
+        )
 
     def initialize(self, compilation: Compilation) -> None:
         verify_manifest(compilation.manifest, compilation.source, compilation.nir)

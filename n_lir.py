@@ -11,6 +11,7 @@ from typing import Any
 from n_ir import IRPhase, IRValidationError, NIRModule, RewriteDelta
 from n_ir_verify import verify_phase
 from n_plan import PlanError, PlanManifest
+from n_ops import machine_operation_kind, validate_scalar_operation
 
 
 @dataclass(frozen=True)
@@ -71,6 +72,10 @@ def lower_to_lir(nir: NIRModule, manifest: PlanManifest) -> LIRKernel:
     field, wave, commit = fields[0], waves[0], commits[0]
     shape = tuple(int(value) for value in field.get("shape", ()))
     operations = list(wave.get("operations", ()))
+    try:
+        operation = validate_scalar_operation(str(operations[2].get("value")))
+    except ValueError as exc:
+        raise PlanError(str(exc)) from exc
     if (
         field.get("name") != manifest.field
         or field.get("dtype") != manifest.dtype
@@ -87,7 +92,7 @@ def lower_to_lir(nir: NIRModule, manifest: PlanManifest) -> LIRKernel:
         or [op.get("kind") for op in operations] != ["read", "write", "delta", "delta_value"]
         or operations[0].get("value") != manifest.field
         or operations[1].get("value") != manifest.field
-        or operations[2].get("value") != manifest.operation
+        or operation != manifest.operation
         or operations[3].get("value") != manifest.scalar
     ):
         raise PlanError("NIR nodes do not match the validated plan during LIR lowering")
@@ -115,7 +120,7 @@ def lower_to_lir(nir: NIRModule, manifest: PlanManifest) -> LIRKernel:
         ),
         loop_extent=math.prod(shape),
         operations=(
-            LIROperation("add_scalar", (manifest.field,), output_name, manifest.scalar),
+            LIROperation(manifest.operation, (manifest.field,), output_name, manifest.scalar),
         ),
         effects=(f"read:{manifest.field}", f"write:{output_name}"),
         numeric_contract="exact-reference-f64",
@@ -207,8 +212,8 @@ def lower_machine(planned: NIRModule, manifest: PlanManifest) -> NIRModule:
             "vector_width": 2,
         },
         {
-            "id": f"machine:add_scalar:{manifest.wave}",
-            "kind": "machine.add_scalar",
+            "id": f"machine:{manifest.operation}:{manifest.wave}",
+            "kind": machine_operation_kind(manifest.operation),
             "input": manifest.field,
             "output": f"delta:{manifest.field}",
             "scalar": manifest.scalar,

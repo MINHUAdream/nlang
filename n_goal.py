@@ -9,6 +9,7 @@ import math
 from typing import Iterable, Mapping, Sequence
 
 from n_ir import NIRModule
+from n_ops import validate_scalar_operation
 
 
 @dataclass(frozen=True)
@@ -219,12 +220,27 @@ def candidate_specs(module: NIRModule, goal_name: str) -> tuple[CandidateSpec, .
     expected = {"reference_exact", "cpu_simd_sse2"}
     if names != expected:
         raise ValueError("goal must declare exactly reference_exact and cpu_simd_sse2 options")
+    waves = [node for node in module.nodes if node.get("kind") == "wave"]
+    if len(waves) != 1:
+        raise ValueError("goal candidate selection requires exactly one wave")
+    delta_operations = [
+        operation.get("value")
+        for operation in waves[0].get("operations", ())
+        if operation.get("kind") == "delta"
+    ]
+    if len(delta_operations) != 1 or not isinstance(delta_operations[0], str):
+        raise ValueError("goal candidate selection requires one scalar delta operation")
+    try:
+        operation = validate_scalar_operation(delta_operations[0])
+    except ValueError as exc:
+        raise ValueError(str(exc)) from exc
     return (
-        CandidateSpec("reference_exact", "reference", ("reference", "add_scalar")),
+        CandidateSpec("reference_exact", "reference", ("reference", operation), operation),
         CandidateSpec(
             "cpu_simd_sse2",
             "n-native-x64-sse2-f64",
-            ("cpu", "sse2", "sse2_packed_f64"),
+            ("cpu", "sse2", "sse2_packed_f64", operation),
+            operation,
         ),
     )
 

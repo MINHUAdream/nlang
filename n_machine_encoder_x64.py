@@ -88,8 +88,12 @@ class X64Encoder:
         return bytes(self.code)
 
 
-def encode_add_scalar_f64x2() -> bytes:
-    """Encode the supported two-lane packed-f64 add kernel deterministically."""
+def encode_scalar_f64x2(operation: str) -> bytes:
+    """Encode a deterministic two-lane packed-f64 scalar kernel."""
+
+    from n_ops import packed_f64_opcode
+
+    packed_opcode = packed_f64_opcode(operation)
 
     encoder = X64Encoder()
     encoder.push(6)
@@ -107,7 +111,8 @@ def encode_add_scalar_f64x2() -> bytes:
     encoder.jge("done")
     encoder.loadupd(0, 6)
     encoder.loadupd(1, 7)
-    encoder.addpd(0, 1)
+    encoder.emit(0x66)
+    encoder.emit(0x0F, packed_opcode, 0xC1)
     encoder.storeupd(0, 3)
     encoder.add_imm32(6, 16)
     encoder.add_imm32(7, 16)
@@ -123,4 +128,10 @@ def encode_add_scalar_f64x2() -> bytes:
     return encoder.finish()
 
 
-__all__ = ["X64Encoder", "encode_add_scalar_f64x2"]
+def encode_add_scalar_f64x2() -> bytes:
+    """Compatibility wrapper for the original add kernel encoder."""
+
+    return encode_scalar_f64x2("add_scalar")
+
+
+__all__ = ["X64Encoder", "encode_add_scalar_f64x2", "encode_scalar_f64x2"]
