@@ -1,8 +1,10 @@
 import unittest
 
+from n_backend_simd import CPUSIMDBackend
 from n_backend_tl import ReferenceBackend
 from n_compile import compile_source
 from n_front import NParseError, parse
+from n_measure import _file_digest, measure
 from n_native import NativeBackend
 from n_rtm import Runtime
 
@@ -21,6 +23,19 @@ wave transform(x) -> delta {{
 }}
 
 commit transform into x;
+"""
+
+
+def goal_source_for(operation: str) -> str:
+    return source_for(operation, scalar=1.0, size=4) + """
+goal transform_plan {
+  target minimize cost;
+  target maximize quality;
+  require [cpu];
+  option reference_exact { cost: 1.0; quality: 1.0; };
+  option cpu_simd_sse2 { cost: 0.5; quality: 1.0; };
+}
+synthesize transform_plan;
 """
 
 
@@ -52,6 +67,19 @@ class KernelFamilyReferenceTests(unittest.TestCase):
 
 
 class KernelFamilyCompilerTests(unittest.TestCase):
+    def test_measured_goal_compiles_each_scalar_operation(self):
+        for operation in ("add_scalar", "sub_scalar", "mul_scalar"):
+            with self.subTest(operation=operation):
+                compilation = compile_source(
+                    goal_source_for(operation),
+                    initial={"x": [1.0, 2.0, 3.0, 4.0]},
+                    samples=1,
+                    warmup_samples=0,
+                )
+                self.assertEqual(compilation.manifest.operation, operation)
+                self.assertEqual(compilation.goal_decision.status, "selected")
+                self.assertEqual(compilation.selection_receipt.search_count, 2)
+
     def test_operation_flows_through_plan_lir_machine_and_code(self):
         expected_opcode = {
             "add_scalar": bytes.fromhex("660f58"),
@@ -86,6 +114,62 @@ class KernelFamilyCompilerTests(unittest.TestCase):
                     self.assertEqual(runtime.field("x").values, expected)
         finally:
             backend.close()
+
+
+class KernelFamilyReceiptTests(unittest.TestCase):
+    def test_receipt_digests_include_operation_registry(self):
+        receipt = measure(
+            source_for("mul_scalar"),
+            {"x": [1.0, 2.0, 3.0, 4.0, 5.0]},
+            ReferenceBackend(),
+            samples=1,
+            warmup_samples=0,
+        )
+        self.assertEqual(receipt.status, "committed")
+        self.assertEqual(
+            receipt.compiler_digest,
+            _file_digest(
+                (
+                    "n_front.py",
+                    "n_ir.py",
+                    "n_ir_verify.py",
+                    "n_goal.py",
+                    "n_plan.py",
+                    "n_lir.py",
+                    "n_codegen_x64.py",
+                    "n_machine_encoder_x64.py",
+                    "n_compile.py",
+                    "n_ops.py",
+                )
+            ),
+        )
+        self.assertEqual(
+            receipt.backend_digest,
+            _file_digest(("n_backend_tl.py", "n_backend_types.py", "n_ops.py")),
+        )
+
+    def test_cpu_simd_receipt_binds_encoder_and_operation_registry(self):
+        receipt = measure(
+            source_for("sub_scalar"),
+            {"x": [1.0, 2.0, 3.0, 4.0, 5.0]},
+            CPUSIMDBackend(),
+            samples=1,
+            warmup_samples=0,
+        )
+        if receipt.status == "unavailable":
+            self.skipTest("CPU SIMD backend unavailable")
+        self.assertEqual(receipt.status, "committed")
+        self.assertEqual(
+            receipt.backend_digest,
+            _file_digest(
+                (
+                    "n_backend_simd.py",
+                    "n_backend_types.py",
+                    "n_machine_encoder_x64.py",
+                    "n_ops.py",
+                )
+            ),
+        )
 
 
 if __name__ == "__main__":

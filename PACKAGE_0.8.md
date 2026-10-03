@@ -82,6 +82,10 @@ Windows x86-64 上的 n-owned SSE2 编码使用 packed-f64 `addpd/subpd/mulpd`�
 单 field/wave/commit；GPU tile、NPU SRAM、CXL memory、通用 CFG/SSA、完整寄存器
 分配和普遍超过 C/Fortran 的主张仍未交付。
 
+measurement receipt 的 `compiler_digest` 现在包含 `n_ops.py`；native、CPU-SIMD 和
+reference backend 的 `backend_digest` 同样绑定实际使用的算子注册表和机器编码器，
+避免只修改算子语义或 emitter 却复用旧回执。
+
 验证：
 
 ```text

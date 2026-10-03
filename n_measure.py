@@ -270,15 +270,27 @@ def measure(
             "n_codegen_x64.py",
             "n_machine_encoder_x64.py",
             "n_compile.py",
+            "n_ops.py",
         )
     )
     runtime_digest = _file_digest(("n_rtm.py",))
     backend_files = {
-        "n-native-x64-sse2-f64": ("n_native.py", "n_backend_types.py"),
-        "cpu-simd-sse2-f64": ("n_backend_simd.py", "n_backend_types.py"),
-        "tl-native": ("n_backend_tl.py", "n_backend_types.py"),
-        "reference": ("n_backend_tl.py", "n_backend_types.py"),
-    }.get(getattr(backend, "name", ""), ("n_backend_tl.py",))
+        "n-native-x64-sse2-f64": (
+            "n_native.py",
+            "n_backend_types.py",
+            "n_codegen_x64.py",
+            "n_machine_encoder_x64.py",
+            "n_ops.py",
+        ),
+        "cpu-simd-sse2-f64": (
+            "n_backend_simd.py",
+            "n_backend_types.py",
+            "n_machine_encoder_x64.py",
+            "n_ops.py",
+        ),
+        "tl-native": ("n_backend_tl.py", "n_backend_types.py", "n_ops.py"),
+        "reference": ("n_backend_tl.py", "n_backend_types.py", "n_ops.py"),
+    }.get(getattr(backend, "name", ""), ("n_backend_tl.py", "n_backend_types.py", "n_ops.py"))
     backend_digest = _file_digest(backend_files)
     benchmark_digest = _digest(
         {

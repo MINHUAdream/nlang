@@ -500,6 +500,10 @@ Windows x86-64/SSE2 的 packed-f64 emitter 分别生成 `addpd`、`subpd` 和 `m
 寄存器分配、自举以及普遍超过 C/Fortran 的结论都需要各自的真实 workload、硬件和
 新鲜 measurement receipt。
 
+回执摘要也随之收紧：`compiler_digest` 包含 `n_ops.py`，native/CPU-SIMD/reference
+的 `backend_digest` 包含其实际依赖的算子注册表与 x64 emitter；算子语义或机器编码
+发生变化时，旧 receipt 不能被误当作当前实现的证据。
+
 验证命令：
 
 ```text
